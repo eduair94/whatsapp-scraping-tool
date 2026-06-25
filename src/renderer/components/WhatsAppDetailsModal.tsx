@@ -1,5 +1,6 @@
 import React from 'react';
 import { WhatsAppResult, WhatsappBusinessResponse } from '../types';
+import { useModalClose } from '../hooks/useModalClose';
 
 interface WhatsAppDetailsModalProps {
   result: WhatsAppResult | null;
@@ -14,6 +15,8 @@ export const WhatsAppDetailsModal: React.FC<WhatsAppDetailsModalProps> = ({
 }) => {
   const [showJson, setShowJson] = React.useState(false);
 
+  useModalClose(isOpen, onClose);
+
   if (!isOpen || !result || !result.data || 'error' in result.data) {
     return null;
   }
@@ -22,8 +25,17 @@ export const WhatsAppDetailsModal: React.FC<WhatsAppDetailsModalProps> = ({
   const isBusinessAccount = 'verifiedName' in data;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="WhatsApp number details"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-6 rounded-t-2xl">
           <div className="flex items-center justify-between">
@@ -46,6 +58,7 @@ export const WhatsAppDetailsModal: React.FC<WhatsAppDetailsModalProps> = ({
             </div>
             <button
               onClick={onClose}
+              aria-label="Close details"
               className="text-white hover:text-green-200 transition-colors"
             >
               <svg

@@ -11,6 +11,10 @@ export interface ElectronAPIFile {
     error?: string;
     numbers?: PhoneNumberData[];
   }>;
+  parseDroppedFile: (filePath: string) => Promise<{
+    error?: string;
+    numbers?: PhoneNumberData[];
+  }>;
 }
 
 export interface ProcessingCallbacks {
@@ -82,6 +86,38 @@ export class FileProcessingManager {
       console.error('File upload error:', error);
       toast.error('Failed to upload file');
       this.callbacks.setCurrentView('welcome');
+      this.callbacks.setIsLoading(false);
+      this.callbacks.setIsAddingMode(false);
+    }
+  }
+
+  async handleDroppedFile(filePath: string, addMode = false): Promise<void> {
+    try {
+      this.callbacks.setIsAddingMode(addMode);
+      this.callbacks.setIsLoading(true);
+      this.callbacks.setCurrentView('processing');
+      this.callbacks.setProcessingStatus('Reading file...');
+
+      const result = await this.electronAPI.parseDroppedFile(filePath);
+
+      if (result.error) {
+        toast.error(result.error);
+        this.callbacks.setCurrentView('welcome');
+      } else if (result.numbers && result.numbers.length > 0) {
+        if (addMode) {
+          this.callbacks.handleAddNumbers(result.numbers);
+        } else {
+          this.callbacks.handleNewNumbers(result.numbers);
+        }
+      } else {
+        toast.error('No phone numbers found in the file');
+        this.callbacks.setCurrentView('welcome');
+      }
+    } catch (error) {
+      console.error('Dropped file error:', error);
+      toast.error('Failed to read the dropped file');
+      this.callbacks.setCurrentView('welcome');
+    } finally {
       this.callbacks.setIsLoading(false);
       this.callbacks.setIsAddingMode(false);
     }

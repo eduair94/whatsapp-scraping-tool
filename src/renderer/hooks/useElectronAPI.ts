@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   AppSettings,
   BulkCheckProgress,
@@ -17,6 +17,9 @@ interface ElectronAPI {
   }>;
   parseTextInput: (
     text: string
+  ) => Promise<{ error?: string; numbers?: PhoneNumberData[] }>;
+  parseDroppedFile: (
+    filePath: string
   ) => Promise<{ error?: string; numbers?: PhoneNumberData[] }>;
   generateRandomNumbers: (
     country: string,
@@ -37,6 +40,7 @@ interface ElectronAPI {
 
   // History and export
   getSessions: () => Promise<CheckSession[]>;
+  getSession: (sessionId: string) => Promise<CheckSession | null>;
   saveSession: (session: CheckSession) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<boolean>;
   exportResults: (
@@ -44,14 +48,18 @@ interface ElectronAPI {
     options: ExportOptions
   ) => Promise<{ success: boolean; filePath?: string; error?: string }>;
 
-  // Event listeners
+  // Event listeners. Each returns an unsubscribe function.
   onFileUploaded: (
     callback: (result: { error?: string; numbers?: PhoneNumberData[] }) => void
-  ) => void;
-  onCheckProgress: (callback: (progress: BulkCheckProgress) => void) => void;
-  onCheckCompleted: (callback: (session: CheckSession) => void) => void;
-  onRateLimitUpdate: (callback: (rateLimitInfo: RateLimitInfo) => void) => void;
-  onSettingsUpdated: (callback: (settings: AppSettings) => void) => void;
+  ) => () => void;
+  onCheckProgress: (
+    callback: (progress: BulkCheckProgress) => void
+  ) => () => void;
+  onCheckCompleted: (callback: (session: CheckSession) => void) => () => void;
+  onRateLimitUpdate: (
+    callback: (rateLimitInfo: RateLimitInfo) => void
+  ) => () => void;
+  onSettingsUpdated: (callback: (settings: AppSettings) => void) => () => void;
 
   // Remove listeners
   removeAllListeners: (channel: string) => void;
@@ -60,6 +68,7 @@ interface ElectronAPI {
 const createMockAPI = (): ElectronAPI => ({
   openFileDialog: async () => ({ error: 'Electron API not available' }),
   parseTextInput: async () => ({ error: 'Electron API not available' }),
+  parseDroppedFile: async () => ({ error: 'Electron API not available' }),
   generateRandomNumbers: async () => ({ error: 'Electron API not available' }),
   startBulkCheck: async () => {},
   cancelCheck: async () => {},
@@ -91,17 +100,18 @@ const createMockAPI = (): ElectronAPI => ({
     return { ...defaultSettings, ...settings };
   },
   getSessions: async () => [],
+  getSession: async () => null,
   saveSession: async () => {},
   deleteSession: async () => false,
   exportResults: async () => ({
     success: false,
     error: 'Electron API not available',
   }),
-  onFileUploaded: () => {},
-  onCheckProgress: () => {},
-  onCheckCompleted: () => {},
-  onRateLimitUpdate: () => {},
-  onSettingsUpdated: () => {},
+  onFileUploaded: () => () => {},
+  onCheckProgress: () => () => {},
+  onCheckCompleted: () => () => {},
+  onRateLimitUpdate: () => () => {},
+  onSettingsUpdated: () => () => {},
   removeAllListeners: () => {},
 });
 
@@ -127,21 +137,10 @@ export const useElectronAPI = (): ElectronAPI => {
     return electronAPIInstance;
   });
 
-  useEffect(() => {
-    // Only set up cleanup on the first instance
-    if (api === electronAPIInstance) {
-      return () => {
-        if (api.removeAllListeners) {
-          api.removeAllListeners('file-uploaded');
-          api.removeAllListeners('check-progress');
-          api.removeAllListeners('check-completed');
-          api.removeAllListeners('settings-updated');
-        }
-      };
-    }
-    // Return empty cleanup function for non-primary instances
-    return () => {};
-  }, [api]);
+  // NOTE: listener teardown is intentionally NOT done here. Each component that
+  // subscribes (via the onX methods) owns its own unsubscribe function and is
+  // responsible for cleanup. Tearing down channels from this shared hook would
+  // clobber listeners registered by sibling components.
 
   return api;
 };

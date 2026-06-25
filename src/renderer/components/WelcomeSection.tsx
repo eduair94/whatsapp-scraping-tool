@@ -3,6 +3,7 @@ import {
   DocumentArrowUpIcon,
 } from '@heroicons/react/24/outline';
 import React, { useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 import { PhoneNumberData } from '../types';
 import { RandomNumberGenerator } from './RandomNumberGenerator';
 
@@ -10,6 +11,7 @@ interface WelcomeSectionProps {
   onFileUpload: (addMode?: boolean) => void;
   onTextSubmit: (text: string) => void;
   onRandomNumbers?: (numbers: PhoneNumberData[]) => void;
+  onFileDrop?: (filePath: string, addMode: boolean) => void;
   isAddingMode?: boolean;
 }
 
@@ -17,6 +19,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   onFileUpload,
   onTextSubmit,
   onRandomNumbers,
+  onFileDrop,
   isAddingMode = false,
 }) => {
   const [textInput, setTextInput] = useState('');
@@ -45,9 +48,19 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     e.stopPropagation();
     setDragActive(false);
 
-    // For now, we'll just trigger the file upload dialog
-    // In the original implementation, this would handle dropped files
-    onFileUpload();
+    const file = e.dataTransfer.files?.[0] as
+      | (File & { path?: string })
+      | undefined;
+
+    // Electron exposes the real filesystem path on dropped File objects, which
+    // lets us reuse the full CSV/Excel/TXT parsing pipeline in the main process.
+    const filePath = file?.path;
+    if (filePath && onFileDrop) {
+      onFileDrop(filePath, isAddingMode);
+    } else {
+      // Fallback (e.g. path unavailable): open the picker.
+      onFileUpload(isAddingMode);
+    }
   };
 
   const handleTextSubmit = () => {
@@ -57,12 +70,19 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   };
 
   const handlePaste = () => {
-    navigator.clipboard.readText().then((text) => {
-      setTextInput(text);
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
-    });
+    navigator.clipboard
+      .readText()
+      .then((text) => {
+        if (!text) {
+          toast.error('Clipboard is empty');
+          return;
+        }
+        setTextInput(text);
+        textareaRef.current?.focus();
+      })
+      .catch(() => {
+        toast.error('Could not read clipboard');
+      });
   };
 
   return (

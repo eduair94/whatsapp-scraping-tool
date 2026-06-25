@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import * as path from 'path';
 import { FileService } from './services/FileService';
 import { StorageService } from './services/StorageService';
 import { WhatsAppService } from './services/WhatsAppService';
+import { countCategories } from './shared/categorize';
 import {
   AppSettings,
   BulkCheckProgress,
@@ -38,7 +39,6 @@ class WhatsAppCheckerApp {
       show: true, // Show immediately
       center: true, // Center the window
       resizable: true,
-      alwaysOnTop: true, // Temporarily force on top
       // icon: path.join(__dirname, '../assets/icon.png'), // Disabled for now
       webPreferences: {
         nodeIntegration: false,
@@ -53,6 +53,18 @@ class WhatsAppCheckerApp {
 
     // Create application menu
     this.createMenu();
+
+    // Navigation hardening: this is a local single-page app, so block any
+    // attempt to navigate away or spawn child windows (defense in depth on top
+    // of contextIsolation/nodeIntegration:false).
+    this.mainWindow.webContents.setWindowOpenHandler(() => ({
+      action: 'deny',
+    }));
+    this.mainWindow.webContents.on('will-navigate', (event, url) => {
+      if (url !== this.mainWindow?.webContents.getURL()) {
+        event.preventDefault();
+      }
+    });
 
     // Load the React HTML file
     await this.mainWindow.loadFile(
@@ -156,6 +168,11 @@ class WhatsAppCheckerApp {
       return await this.handleTextInput(textInput);
     });
 
+    // Handle a file dropped onto the window (parse by its path)
+    ipcMain.handle('parse-file-path', async (_, filePath: string) => {
+      return await this.handleDroppedFile(filePath);
+    });
+
     // Handle bulk check start
     ipcMain.handle(
       'start-bulk-check',
@@ -217,6 +234,31 @@ class WhatsAppCheckerApp {
     ipcMain.handle('delete-session', async (_, sessionId: string) => {
       return await this.storageService.deleteSession(sessionId);
     });
+
+    // Handle full single-session load (used for details / resume / export)
+    ipcMain.handle('get-session', async (_, sessionId: string) => {
+      return await this.storageService.getSession(sessionId);
+    });
+
+    // Utility channels invoked by the preload bridge
+    ipcMain.handle('get-app-version', () => app.getVersion());
+
+    ipcMain.handle('open-external', async (_, url: string) => {
+      // Only allow http(s) links to be opened in the user's browser.
+      if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+        await shell.openExternal(url);
+      }
+    });
+
+    ipcMain.handle(
+      'show-message-box',
+      async (_, options: Electron.MessageBoxOptions) => {
+        if (!this.mainWindow) {
+          return { response: 0, checkboxChecked: false };
+        }
+        return await dialog.showMessageBox(this.mainWindow, options);
+      }
+    );
   }
 
   private async handleFileUpload(): Promise<any> {
@@ -248,6 +290,30 @@ class WhatsAppCheckerApp {
       return {
         error:
           error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  private async handleDroppedFile(
+    filePath: string
+  ): Promise<{ error?: string; numbers?: PhoneNumberData[] }> {
+    try {
+      if (typeof filePath !== 'string' || !filePath) {
+        return { error: 'Invalid file' };
+      }
+
+      const ext = path.extname(filePath).toLowerCase();
+      const allowed = ['.csv', '.xlsx', '.xls', '.txt'];
+      if (!allowed.includes(ext)) {
+        return { error: `Unsupported file type: ${ext || 'unknown'}` };
+      }
+
+      const result = await this.fileService.parseFile(filePath);
+      return { numbers: result.numbers };
+    } catch (error) {
+      console.error('Dropped file error:', error);
+      return {
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -326,6 +392,9 @@ class WhatsAppCheckerApp {
         completedNumbers: 0,
         successfulChecks: 0,
         failedChecks: 0,
+        notOnWhatsAppChecks: 0,
+        apiErrorChecks: 0,
+        rateLimitedChecks: 0,
         results: [],
         settings,
         status: 'running',
@@ -342,7 +411,6 @@ class WhatsAppCheckerApp {
       };
 
       const onRateLimit = (rateLimitInfo: RateLimitInfo) => {
-        console.log('RateLimitInfo', rateLimitInfo);
         if (this.mainWindow) {
           this.mainWindow.webContents.send('rate-limit-update', rateLimitInfo);
         }
@@ -353,18 +421,19 @@ class WhatsAppCheckerApp {
         onRateLimit,
         onComplete: async (results: WhatsAppCheckResult[]) => {
           if (this.currentSession) {
+            const counts = countCategories(results);
             this.currentSession.results = results;
             this.currentSession.endTime = new Date();
             this.currentSession.status = this.checkCancelled
               ? 'cancelled'
               : 'completed';
-            this.currentSession.completedNumbers = results.length;
-            this.currentSession.successfulChecks = results.filter(
-              (r: WhatsAppCheckResult) => !r.error
-            ).length;
-            this.currentSession.failedChecks = results.filter(
-              (r: WhatsAppCheckResult) => r.error
-            ).length;
+            this.currentSession.completedNumbers = counts.completed;
+            this.currentSession.successfulChecks = counts.active;
+            this.currentSession.failedChecks =
+              counts.notOnWhatsApp + counts.apiError;
+            this.currentSession.notOnWhatsAppChecks = counts.notOnWhatsApp;
+            this.currentSession.apiErrorChecks = counts.apiError;
+            this.currentSession.rateLimitedChecks = counts.rateLimited;
 
             await this.storageService.saveSession(this.currentSession);
 

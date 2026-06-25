@@ -47,7 +47,7 @@ export interface WhatsappPersonResponse {
   pushname: string;
   shortName: string;
   type: string;
-  labels: any[];
+  labels: unknown[];
   hasUrlImage: boolean;
   urlImage: string;
 }
@@ -57,7 +57,7 @@ export interface WhatsappBusinessResponse {
   number: string;
   isBusiness: boolean;
   isEnterprise: boolean;
-  labels: any[];
+  labels: unknown[];
   name: string;
   shortName: string;
   verifiedLevel: number;
@@ -86,7 +86,7 @@ export interface BusinessProfile {
   }>;
   email: string | null;
   address: string | null;
-  businessHours: any;
+  businessHours: unknown;
   isProfileLinked: boolean;
   memberSinceText: string;
 }
@@ -126,13 +126,6 @@ export interface CheckSession {
   pausedAt?: Date;
 }
 
-export interface RateLimitInfo {
-  limit: number;
-  remaining: number;
-  reset: number;
-  resetTime?: Date;
-}
-
 export interface BulkCheckProgress {
   completed: number;
   total: number;
@@ -158,30 +151,4 @@ export interface ExportOptions {
   includeErrors?: boolean;
   includeDetails?: boolean;
   filterWhatsAppOnly?: boolean;
-}
-
-// Component Props Interfaces
-export interface NumberListProps {
-  numbers: PhoneNumberData[];
-  onAddNumbers: (newNumbers: PhoneNumberData[]) => void;
-  onRemoveNumbers: (indices: number[]) => void;
-  onStartCheck: () => void;
-  isChecking: boolean;
-}
-
-export interface ResultsTableProps {
-  results: WhatsAppResult[];
-  onViewDetails: (result: WhatsAppResult) => void;
-  filter?: 'all' | 'whatsapp' | 'no-whatsapp' | 'errors';
-}
-
-export interface DetailsModalProps {
-  result: WhatsAppResult | null;
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-export interface RateLimitDisplayProps {
-  rateLimitInfo: RateLimitInfo | null;
-  isVisible: boolean;
 }

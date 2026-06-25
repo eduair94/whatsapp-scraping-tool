@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CheckSession } from '../types';
-import { categorizeResults } from '../utils/resultUtils';
+import { useModalClose } from '../hooks/useModalClose';
 import { SessionDetailsModal } from './SessionDetailsModal';
 
 interface HistoryModalProps {
@@ -13,6 +13,8 @@ interface HistoryModalProps {
   onClearHistory?: () => void;
   onToggleStar?: (session: CheckSession) => void;
   onExportSession?: (session: CheckSession) => void;
+  /** Loads a full session (with results) for the details view. */
+  onLoadSession?: (sessionId: string) => Promise<CheckSession | null>;
 }
 
 export const HistoryModal: React.FC<HistoryModalProps> = ({
@@ -25,17 +27,29 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   onClearHistory,
   onToggleStar,
   onExportSession,
+  onLoadSession,
 }) => {
   const [selectedSession, setSelectedSession] = useState<CheckSession | null>(
     null
   );
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
+  // Escape closes details first if open, otherwise the history modal.
+  useModalClose(isOpen, () =>
+    isDetailsOpen ? setIsDetailsOpen(false) : onClose()
+  );
+
   if (!isOpen) return null;
 
-  const handleSessionClick = (session: CheckSession) => {
+  const handleSessionClick = async (session: CheckSession) => {
+    // The list holds lightweight summaries; load the full session (with
+    // results) before opening the details view.
     setSelectedSession(session);
     setIsDetailsOpen(true);
+    if (onLoadSession) {
+      const full = await onLoadSession(session.id);
+      if (full) setSelectedSession(full);
+    }
   };
 
   const handleResumeSession = () => {
@@ -60,10 +74,18 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         ></div>
 
         {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-modal-title"
+          className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full"
+        >
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">
+              <h3
+                id="history-modal-title"
+                className="text-lg font-medium text-gray-900"
+              >
                 Check History ({sessions.length})
               </h3>
               <div className="flex items-center gap-2">
@@ -77,6 +99,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 )}
                 <button
                   onClick={onClose}
+                  aria-label="Close history"
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <svg
@@ -169,6 +192,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                               }}
                               className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
                               title="Delete session"
+                              aria-label="Delete session"
                             >
                               <svg
                                 className="w-4 h-4"
@@ -202,9 +226,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                           <div>
                             <span className="text-gray-500">Active:</span>
                             <div className="font-medium text-green-600">
-                              {categorizeResults(
-                                session.results
-                              ).activeResults.length.toLocaleString()}
+                              {(session.successfulChecks ?? 0).toLocaleString()}
                             </div>
                           </div>
                           <div>
@@ -212,9 +234,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                               Not on WhatsApp:
                             </span>
                             <div className="font-medium text-gray-600">
-                              {categorizeResults(
-                                session.results
-                              ).notOnWhatsAppResults.length.toLocaleString()}
+                              {(
+                                session.notOnWhatsAppChecks ?? 0
+                              ).toLocaleString()}
                             </div>
                           </div>
                           <div>
@@ -227,9 +249,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
                         <div className="mt-2 text-xs text-gray-500">
                           API Errors:{' '}
-                          {categorizeResults(
-                            session.results
-                          ).apiErrorResults.length.toLocaleString()}
+                          {(session.apiErrorChecks ?? 0).toLocaleString()}
                         </div>
 
                         {session.endTime && (
