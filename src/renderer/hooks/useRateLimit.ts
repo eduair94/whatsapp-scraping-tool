@@ -11,21 +11,16 @@ export const useRateLimit = () => {
 
   const updateRateLimit = useCallback((info: RateLimitInfo) => {
     setRateLimitInfo(info);
-    // Show rate limit bar when we have meaningful data and usage is significant
-    setIsVisible(info.used > 0 || info.remaining < info.limit * 0.9);
+    // Show the bar once usage is meaningful. Guard against limit === 0 (API has
+    // not reported a limit yet) which would otherwise make `limit * 0.9` zero.
+    const used = info.used ?? 0;
+    const hasLimit = info.limit > 0;
+    setIsVisible(used > 0 || (hasLimit && info.remaining < info.limit * 0.9));
   }, []);
 
   useEffect(() => {
-    // Listen for dedicated rate limit updates
-    const handleRateLimitUpdate = (rateLimitInfo: RateLimitInfo) => {
-      updateRateLimit(rateLimitInfo);
-    };
-
-    electronAPI.onRateLimitUpdate(handleRateLimitUpdate);
-
-    return () => {
-      electronAPI.removeAllListeners('rate-limit-update');
-    };
+    const unsubscribe = electronAPI.onRateLimitUpdate(updateRateLimit);
+    return unsubscribe;
   }, [electronAPI, updateRateLimit]);
 
   const getRemainingTimeText = useCallback(() => {
@@ -43,11 +38,11 @@ export const useRateLimit = () => {
   }, [rateLimitInfo]);
 
   const getUsagePercentage = useCallback(() => {
-    if (!rateLimitInfo) return 0;
-    return (
+    if (!rateLimitInfo || rateLimitInfo.limit <= 0) return 0;
+    const pct =
       ((rateLimitInfo.limit - rateLimitInfo.remaining) / rateLimitInfo.limit) *
-      100
-    );
+      100;
+    return Math.min(100, Math.max(0, pct));
   }, [rateLimitInfo]);
 
   return {

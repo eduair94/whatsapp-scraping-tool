@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CheckSession } from '../types';
+import { useModalClose } from '../hooks/useModalClose';
 import {
   categorizeResults,
   getResultStatusClasses,
@@ -35,6 +36,20 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
     'all' | 'active' | 'not_on_whatsapp' | 'api_error' | 'pending'
   >('all');
 
+  useModalClose(isOpen, onClose);
+
+  // Reset to the first page whenever the filter changes so we never land on an
+  // out-of-range page (which would render an empty list).
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterType]);
+
+  // Categorize once per session rather than on every render/keystroke.
+  const categorization = useMemo(
+    () => categorizeResults(session?.results || []),
+    [session]
+  );
+
   // Adaptive pagination based on dataset size
   const getItemsPerPage = (totalItems: number) => {
     if (totalItems > 100000) return 50; // 50 items for 100k+
@@ -47,9 +62,6 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
     : 100;
 
   if (!isOpen || !session) return null;
-
-  // Categorize results for better analysis
-  const categorization = categorizeResults(session.results);
 
   // Filter results based on selected filter
   let filteredResults = session.results;
@@ -88,8 +100,17 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Session details"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6">
           <div className="flex items-center justify-between">
@@ -133,6 +154,7 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
             </div>
             <button
               onClick={onClose}
+              aria-label="Close session details"
               className="text-white hover:text-blue-200"
             >
               <svg
@@ -294,9 +316,10 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
               <input
                 type="number"
                 value={currentPage}
+                aria-label="Page number"
                 onChange={(e) => {
-                  const page = parseInt(e.target.value);
-                  if (page >= 1 && page <= totalPages) {
+                  const page = parseInt(e.target.value, 10);
+                  if (!Number.isNaN(page) && page >= 1 && page <= totalPages) {
                     setCurrentPage(page);
                   }
                 }}
@@ -334,24 +357,30 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
           )}
 
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {currentResults.map((result, index) => {
-              const statusClasses = getResultStatusClasses(result);
-              const statusLabel = getResultStatusLabel(result);
+            {currentResults.length === 0 ? (
+              <div className="text-center py-12 text-gray-500 text-sm">
+                No results match this filter.
+              </div>
+            ) : (
+              currentResults.map((result, index) => {
+                const statusClasses = getResultStatusClasses(result);
+                const statusLabel = getResultStatusLabel(result);
 
-              return (
-                <div
-                  key={startIndex + index}
-                  className={`flex items-center justify-between p-3 rounded-lg border ${statusClasses.row}`}
-                >
-                  <span className="font-mono text-sm">{result.number}</span>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses.badge}`}
+                return (
+                  <div
+                    key={startIndex + index}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${statusClasses.row}`}
                   >
-                    {statusLabel}
-                  </span>
-                </div>
-              );
-            })}
+                    <span className="font-mono text-sm">{result.number}</span>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses.badge}`}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>

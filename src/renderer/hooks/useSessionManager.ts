@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckSession } from '../types';
 import { useElectronAPI } from './useElectronAPI';
 import { categorizeResults } from '../utils/resultUtils';
@@ -41,94 +41,122 @@ export const useSessionManager = () => {
     setState((prev) => ({
       ...prev,
       currentSession: session,
-      canResume: 
+      canResume:
         session.status === 'pending' ||
-        session.status === 'running' || 
+        session.status === 'running' ||
         session.status === 'cancelled',
       canPause: session.status === 'running',
     }));
   }, []);
 
-  const pauseSession = useCallback(async () => {
-    if (!state.currentSession || state.currentSession.status !== 'running') {
-      return;
-    }
-
-    try {
-      await electronAPI.cancelCheck();
-      
-      // Update session status and timestamps
-      const updates = {
-        status: 'cancelled' as const,
-        pausedAt: new Date(),
-      };
-      
-      const updatedSession = { ...state.currentSession, ...updates };
-      await electronAPI.saveSession(updatedSession);
-      
-      setState((prev) => ({
-        ...prev,
-        currentSession: updatedSession,
-        canPause: false,
-        canResume: true,
-      }));
-    } catch (error) {
-      console.error('Failed to pause session:', error);
-    }
-  }, [state.currentSession, electronAPI]);
-
-  const resumeSession = useCallback(async () => {
-    if (!state.currentSession || !state.canResume) {
-      return;
-    }
-
-    try {
-      let numbersToCheck: { original: string; cleaned: string; isValid: boolean }[] = [];
-
-      // For pending sessions that haven't started, use originalNumbers
-      if (state.currentSession.status === 'pending' && state.currentSession.originalNumbers) {
-        numbersToCheck = state.currentSession.originalNumbers.map((num) => ({
-          original: num.original,
-          cleaned: num.cleaned,
-          isValid: num.isValid,
-        }));
-      } else {
-        // For sessions that were started but paused, use categorization to get only pending numbers
-        const categorization = categorizeResults(state.currentSession.results);
-        numbersToCheck = categorization.pendingResults.map((result) => ({
-          original: result.number,
-          cleaned: result.number,
-          isValid: true,
-        }));
+  const pauseSession = useCallback(
+    async (sessionArg?: CheckSession) => {
+      const base = sessionArg || state.currentSession;
+      if (!base || base.status !== 'running') {
+        return;
       }
 
-      if (numbersToCheck.length > 0) {
-        // Update session status and timestamps
-        const updates = {
-          status: 'running' as const,
-          lastResumedAt: new Date(),
+      try {
+        await electronAPI.cancelCheck();
+
+        const updatedSession = {
+          ...base,
+          status: 'cancelled' as const,
+          pausedAt: new Date(),
         };
-        
-        const updatedSession = { ...state.currentSession, ...updates };
         await electronAPI.saveSession(updatedSession);
-        
-        await electronAPI.startBulkCheck(
-          numbersToCheck,
-          state.currentSession.settings,
-          state.currentSession.id
-        );
-        
+
         setState((prev) => ({
           ...prev,
           currentSession: updatedSession,
+          sessions: prev.sessions.map((s) =>
+            s.id === updatedSession.id ? { ...s, ...updatedSession } : s
+          ),
+          canPause: false,
+          canResume: true,
+        }));
+      } catch (error) {
+        console.error('Failed to pause session:', error);
+      }
+    },
+    [state.currentSession, electronAPI]
+  );
+
+  const resumeSession = useCallback(
+    async (sessionArg?: CheckSession) => {
+      const base = sessionArg || state.currentSession;
+      const canResume =
+        base &&
+        (base.status === 'pending' ||
+          base.status === 'running' ||
+          base.status === 'cancelled');
+      if (!base || !canResume) {
+        return;
+      }
+
+      try {
+        // List entries are lightweight summaries; load the full session so we
+        // have its results / originalNumbers.
+        const full = (await electronAPI.getSession(base.id)) || base;
+
+        let numbersToCheck: {
+          original: string;
+          cleaned: string;
+          isValid: boolean;
+        }[] = [];
+
+        if (full.status === 'pending' && full.originalNumbers) {
+          numbersToCheck = full.originalNumbers.map((num) => ({
+            original: num.original,
+            cleaned: num.cleaned,
+            isValid: num.isValid,
+          }));
+        } else {
+          // Re-check everything that did not reach a definitive answer:
+          // never-returned (pending) and throttled (rate-limited) numbers.
+          const categorization = categorizeResults(full.results || []);
+          numbersToCheck = [
+            ...categorization.pendingResults,
+            ...categorization.rateLimitedResults,
+          ].map((result) => ({
+            original: result.number,
+            cleaned: result.number,
+            isValid: true,
+          }));
+        }
+
+        if (numbersToCheck.length === 0) {
+          return;
+        }
+
+        const updatedSession = {
+          ...full,
+          status: 'running' as const,
+          lastResumedAt: new Date(),
+        };
+        await electronAPI.saveSession(updatedSession);
+
+        await electronAPI.startBulkCheck(
+          numbersToCheck,
+          full.settings,
+          full.id
+        );
+
+        setState((prev) => ({
+          ...prev,
+          currentSession: updatedSession,
+          sessions: prev.sessions.map((s) =>
+            s.id === updatedSession.id ? { ...s, ...updatedSession } : s
+          ),
           canResume: false,
           canPause: true,
         }));
+      } catch (error) {
+        console.error('Failed to resume session:', error);
       }
-    } catch (error) {
-      console.error('Failed to resume session:', error);
-    }
-  }, [state.currentSession, state.canResume, electronAPI]);
+    },
+    [state.currentSession, electronAPI]
+  );
 
   const addSession = useCallback((session: CheckSession) => {
     setState((prev) => ({
@@ -233,22 +261,47 @@ export const useSessionManager = () => {
     [electronAPI]
   );
 
+  const getFullSession = useCallback(
+    (sessionId: string) => electronAPI.getSession(sessionId),
+    [electronAPI]
+  );
+
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
 
-  return {
-    ...state,
-    loadSessions,
-    selectSession,
-    pauseSession,
-    resumeSession,
-    addSession,
-    updateCurrentSession,
-    updateSessionById,
-    deleteSession,
-    clearAllSessions,
-    toggleStarSession,
-    exportSession,
-  };
+  // Memoize so consumers (and anything depending on this object) get a stable
+  // reference that only changes when the underlying state/callbacks change.
+  return useMemo(
+    () => ({
+      ...state,
+      loadSessions,
+      selectSession,
+      pauseSession,
+      resumeSession,
+      addSession,
+      updateCurrentSession,
+      updateSessionById,
+      deleteSession,
+      clearAllSessions,
+      toggleStarSession,
+      exportSession,
+      getFullSession,
+    }),
+    [
+      state,
+      loadSessions,
+      selectSession,
+      pauseSession,
+      resumeSession,
+      addSession,
+      updateCurrentSession,
+      updateSessionById,
+      deleteSession,
+      clearAllSessions,
+      toggleStarSession,
+      exportSession,
+      getFullSession,
+    ]
+  );
 };

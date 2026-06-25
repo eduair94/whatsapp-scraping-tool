@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { CheckSession, WhatsAppResult } from '../types';
+import { categorizeResults } from '../utils/resultUtils';
 
 interface ResultsSectionProps {
   session: CheckSession | null;
@@ -9,18 +10,43 @@ interface ResultsSectionProps {
   onViewDetails: (result: WhatsAppResult) => void;
 }
 
-export const ResultsSection: React.FC<ResultsSectionProps> = ({
+const ResultsSectionComponent: React.FC<ResultsSectionProps> = ({
   session,
   results,
   onNewCheck,
   onExportResults,
   onViewDetails,
 }) => {
+  // Categorize once per results change so the summary screen agrees with the
+  // history/session views (single source of truth in resultUtils).
+  const categorization = useMemo(() => categorizeResults(results), [results]);
+
   if (!session) return null;
 
-  const activeNumbers = results.filter((r) => r.data && !('error' in r.data));
-  const inactiveNumbers = results.filter((r) => !r.data || 'error' in r.data);
+  const activeNumbers = categorization.activeResults;
+  const inactiveNumbers = categorization.notOnWhatsAppResults;
   const totalChecked = results.length;
+
+  if (totalChecked === 0) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            No results to show
+          </h2>
+          <p className="text-gray-600 mb-6">
+            This session does not contain any checked numbers yet.
+          </p>
+          <button
+            onClick={onNewCheck}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+          >
+            Start a New Check
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -225,7 +251,7 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({
             <div className="space-y-2">
               {activeNumbers.slice(0, 100).map((result, index) => (
                 <div
-                  key={index}
+                  key={`${result.number}-${index}`}
                   className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200"
                 >
                   <span className="font-mono text-sm">{result.number}</span>
@@ -274,7 +300,7 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({
             <div className="space-y-2">
               {inactiveNumbers.slice(0, 100).map((result, index) => (
                 <div
-                  key={index}
+                  key={`${result.number}-${index}`}
                   className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200"
                 >
                   <span className="font-mono text-sm">{result.number}</span>
@@ -295,3 +321,5 @@ export const ResultsSection: React.FC<ResultsSectionProps> = ({
     </div>
   );
 };
+
+export const ResultsSection = React.memo(ResultsSectionComponent);

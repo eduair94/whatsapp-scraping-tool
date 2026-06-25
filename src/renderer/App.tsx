@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { CheckingSection } from './components/CheckingSection';
 import { Header } from './components/Header';
@@ -157,6 +157,13 @@ const App: React.FC = () => {
     [fileProcessingManager, state.isAddingMode]
   );
 
+  const handleFileDrop = useCallback(
+    async (filePath: string, addMode: boolean) => {
+      await fileProcessingManager.handleDroppedFile(filePath, addMode);
+    },
+    [fileProcessingManager]
+  );
+
   const handleStartCheck = useCallback(async () => {
     if (!state.settings?.apiKey) {
       toast.error('Please configure your API key in settings first');
@@ -171,34 +178,35 @@ const App: React.FC = () => {
     }
 
     try {
-      // Use existing session if available, otherwise create a new one
-      let session = state.currentSession;
+      // Use existing pending session if available, otherwise create a new one.
+      const existing = state.currentSession;
+      let activeSession: CheckSession;
 
-      if (!session || session.status !== 'pending') {
-        // Only create a new session if there's no pending session
-        session = await sessionOperations.createSessionForCheck(
+      if (!existing || existing.status !== 'pending') {
+        activeSession = await sessionOperations.createSessionForCheck(
           validNumbers,
           state.settings
         );
-        actions.setCurrentSession(session);
-        refs.currentSessionRef.current = session;
       } else {
-        // Update existing pending session with current settings
-        const updatedSession = {
-          ...session,
+        // Update existing pending session with current settings/count.
+        activeSession = {
+          ...existing,
           totalNumbers: validNumbers.length,
           settings: state.settings,
         };
-        sessionOperations.updateSession(updatedSession);
-        actions.setCurrentSession(updatedSession);
-        refs.currentSessionRef.current = updatedSession;
+        sessionOperations.updateSession(activeSession);
         toast.success(`Starting check with ${validNumbers.length} numbers`);
       }
 
+      actions.setCurrentSession(activeSession);
+      refs.currentSessionRef.current = activeSession;
+
+      // Pass the resolved session and only the valid numbers so the session
+      // metadata and the submitted set stay consistent.
       await checkingManager.startBulkCheck(
-        state.phoneNumbers,
+        validNumbers,
         state.settings,
-        session
+        activeSession
       );
     } catch (error) {
       console.error('Start check error:', error);
@@ -281,100 +289,102 @@ const App: React.FC = () => {
     actions.setIsAddingMode(false);
   }, [actions]);
 
-  // Effects
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const loadedSettings = await electronAPI.getSettings();
-        actions.setSettings(loadedSettings);
-      } catch (error) {
-        console.error('Failed to load settings:', error);
-        toast.error('Failed to load settings');
-      }
-    };
-
-    const setupEventListeners = () => {
-      // Clear existing listeners first to prevent duplicates
-      electronAPI.removeAllListeners('file-uploaded');
-      electronAPI.removeAllListeners('check-progress');
-      electronAPI.removeAllListeners('check-completed');
-      electronAPI.removeAllListeners('settings-updated');
-
-      electronAPI.onFileUploaded((result) => {
-        if (result.error) {
-          toast.error(result.error);
-          actions.setCurrentView('welcome');
-        } else if (result.numbers) {
-          if (state.isAddingMode) {
-            handleAddNumbers(result.numbers);
-          } else {
-            handleNewNumbers(result.numbers);
-          }
-        }
-        actions.setIsLoading(false);
-        actions.setIsAddingMode(false);
-      });
-
-      electronAPI.onCheckProgress((progress) => {
-        actions.setCheckProgress(progress);
-
-        // Update the pending session with progress
-        const updatedSession = sessionOperations.updateSessionProgress(
-          refs.currentSessionRef.current,
-          progress
-        );
-        if (updatedSession) {
-          actions.setCurrentSession(updatedSession);
-          refs.currentSessionRef.current = updatedSession;
-        }
-      });
-
-      electronAPI.onCheckCompleted((session) => {
-        // Update the existing pending session instead of adding a new one
-        const updatedSession = sessionOperations.completeSession(
-          refs.currentSessionRef.current,
-          session
-        );
-
-        actions.setCurrentSession(updatedSession);
-        refs.currentSessionRef.current = updatedSession;
-        actions.setCheckResults(session.results);
-        actions.setCurrentView('results');
-        actions.setCheckProgress(null);
-
-        // Only show toast if we haven't shown one for this session
-        const sessionIdToCheck =
-          refs.currentSessionRef.current?.id || session.id;
-        if (!refs.completedSessionIds.current.has(sessionIdToCheck)) {
-          toast.success('WhatsApp number check completed!');
-          refs.completedSessionIds.current.add(sessionIdToCheck);
-        }
-      });
-
-      electronAPI.onSettingsUpdated((updatedSettings) => {
-        actions.setSettings(updatedSettings);
-      });
-    };
-
-    loadSettings();
-    setupEventListeners();
-
-    // Cleanup function
-    return () => {
-      electronAPI.removeAllListeners('file-uploaded');
-      electronAPI.removeAllListeners('check-progress');
-      electronAPI.removeAllListeners('check-completed');
-      electronAPI.removeAllListeners('settings-updated');
-    };
-  }, [
-    electronAPI,
-    state.isAddingMode,
+  // Volatile values/handlers the IPC listeners need. Kept in a ref that is
+  // refreshed every render so the listeners (registered ONCE on mount) always
+  // read current values without being torn down and re-registered on every
+  // render — which previously dropped progress/completed events mid-check.
+  const latest = useRef({
+    isAddingMode: state.isAddingMode,
     handleAddNumbers,
     handleNewNumbers,
     sessionOperations,
     actions,
     refs,
-  ]);
+  });
+  latest.current = {
+    isAddingMode: state.isAddingMode,
+    handleAddNumbers,
+    handleNewNumbers,
+    sessionOperations,
+    actions,
+    refs,
+  };
+
+  // Load settings once on mount.
+  useEffect(() => {
+    electronAPI
+      .getSettings()
+      .then((loadedSettings) => actions.setSettings(loadedSettings))
+      .catch((error) => {
+        console.error('Failed to load settings:', error);
+        toast.error('Failed to load settings');
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Register IPC listeners ONCE on mount; clean up via the returned unsubscribers.
+  useEffect(() => {
+    const unsubscribers = [
+      electronAPI.onFileUploaded((result) => {
+        const l = latest.current;
+        if (result.error) {
+          toast.error(result.error);
+          l.actions.setCurrentView('welcome');
+        } else if (result.numbers) {
+          if (l.isAddingMode) {
+            l.handleAddNumbers(result.numbers);
+          } else {
+            l.handleNewNumbers(result.numbers);
+          }
+        }
+        l.actions.setIsLoading(false);
+        l.actions.setIsAddingMode(false);
+      }),
+
+      electronAPI.onCheckProgress((progress) => {
+        const l = latest.current;
+        l.actions.setCheckProgress(progress);
+
+        const updatedSession = l.sessionOperations.updateSessionProgress(
+          l.refs.currentSessionRef.current,
+          progress
+        );
+        if (updatedSession) {
+          l.actions.setCurrentSession(updatedSession);
+          l.refs.currentSessionRef.current = updatedSession;
+        }
+      }),
+
+      electronAPI.onCheckCompleted((session) => {
+        const l = latest.current;
+        const updatedSession = l.sessionOperations.completeSession(
+          l.refs.currentSessionRef.current,
+          session
+        );
+
+        l.actions.setCurrentSession(updatedSession);
+        l.refs.currentSessionRef.current = updatedSession;
+        l.actions.setCheckResults(session.results);
+        l.actions.setCurrentView('results');
+        l.actions.setCheckProgress(null);
+
+        const sessionIdToCheck =
+          l.refs.currentSessionRef.current?.id || session.id;
+        if (!l.refs.completedSessionIds.current.has(sessionIdToCheck)) {
+          toast.success('WhatsApp number check completed!');
+          l.refs.completedSessionIds.current.add(sessionIdToCheck);
+        }
+      }),
+
+      electronAPI.onSettingsUpdated((updatedSettings) => {
+        latest.current.actions.setSettings(updatedSettings);
+      }),
+    ];
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [electronAPI]);
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -390,6 +400,7 @@ const App: React.FC = () => {
           <WelcomeSection
             onFileUpload={handleFileUpload}
             onTextSubmit={handleTextInput}
+            onFileDrop={handleFileDrop}
             onRandomNumbers={(numbers: PhoneNumberData[]) => {
               if (state.isAddingMode) {
                 handleAddNumbers(numbers);
@@ -450,6 +461,7 @@ const App: React.FC = () => {
         isOpen={state.isHistoryOpen}
         onClose={() => actions.setIsHistoryOpen(false)}
         sessions={sessionManager.sessions}
+        onLoadSession={sessionManager.getFullSession}
         onResumeSession={sessionManager.resumeSession}
         onPauseSession={sessionManager.pauseSession}
         onToggleStar={async (session: CheckSession) => {

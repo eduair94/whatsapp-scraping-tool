@@ -46,6 +46,8 @@ export interface WhatsAppCheckResult {
     | null;
   error?: string;
   rateLimitInfo?: RateLimitInfo;
+  /** ISO timestamp set when the check first completed; preserved across saves. */
+  checkedAt?: string;
 }
 
 export interface WhatsappPersonResponse {
@@ -116,7 +118,7 @@ export interface BulkCheckProgress {
 
 export interface BulkCheckOptions {
   onProgress?: (progress: BulkCheckProgress) => void;
-  onComplete?: (results: WhatsAppCheckResult[]) => void;
+  onComplete?: (results: WhatsAppCheckResult[]) => void | Promise<void>;
   onRateLimit?: (info: RateLimitInfo) => void;
   stopOnError?: boolean;
   maxRetries?: number;
@@ -131,9 +133,16 @@ export interface CheckSession {
   completedNumbers: number;
   successfulChecks: number;
   failedChecks: number;
+  notOnWhatsAppChecks: number;
+  apiErrorChecks: number;
+  rateLimitedChecks: number;
   results: WhatsAppCheckResult[];
+  originalNumbers?: PhoneNumberData[];
   settings: AppSettings;
-  status: 'running' | 'completed' | 'cancelled' | 'error';
+  status: 'pending' | 'running' | 'completed' | 'cancelled' | 'error';
+  isStarred?: boolean;
+  lastResumedAt?: Date;
+  pausedAt?: Date;
 }
 
 export interface ExportOptions {

@@ -9,6 +9,28 @@ import {
   RateLimitInfo,
 } from './types';
 
+// Channels the renderer is allowed to subscribe to / clear.
+const ALLOWED_EVENT_CHANNELS = [
+  'file-uploaded',
+  'check-progress',
+  'check-completed',
+  'rate-limit-update',
+  'settings-updated',
+  'export-completed',
+  'show-export-dialog',
+];
+
+// Registers a listener and returns an unsubscribe function that removes only
+// that specific listener.
+function subscribe<T>(
+  channel: string,
+  callback: (payload: T) => void
+): () => void {
+  const handler = (_event: unknown, payload: T) => callback(payload);
+  ipcRenderer.on(channel, handler as never);
+  return () => ipcRenderer.removeListener(channel, handler as never);
+}
+
 // Define the API that will be exposed to the renderer process
 const electronAPI = {
   // File operations
@@ -18,6 +40,7 @@ const electronAPI = {
   }> =>
     ipcRenderer.invoke('upload-file').then((result) => {
       if (!result) return { error: 'No file selected' };
+      if (result.error) return { error: result.error };
       return { numbers: result.numbers };
     }),
 
@@ -26,8 +49,13 @@ const electronAPI = {
   ): Promise<{ error?: string; numbers?: PhoneNumberData[] }> =>
     ipcRenderer.invoke('process-text-input', textInput).then((result) => {
       if (!result) return { error: 'Failed to parse text input' };
-      return { numbers: result.numbers };
+      return { numbers: result.numbers, error: result.error };
     }),
+
+  parseDroppedFile: (
+    filePath: string
+  ): Promise<{ error?: string; numbers?: PhoneNumberData[] }> =>
+    ipcRenderer.invoke('parse-file-path', filePath),
 
   // Generate random phone numbers
   generateRandomNumbers: (
@@ -58,6 +86,9 @@ const electronAPI = {
   getSessions: (): Promise<CheckSession[]> =>
     ipcRenderer.invoke('get-sessions'),
 
+  getSession: (sessionId: string): Promise<CheckSession | null> =>
+    ipcRenderer.invoke('get-session', sessionId),
+
   saveSession: (session: CheckSession): Promise<void> =>
     ipcRenderer.invoke('save-session', session),
 
@@ -71,28 +102,23 @@ const electronAPI = {
   ): Promise<{ success: boolean; filePath?: string; error?: string }> =>
     ipcRenderer.invoke('export-results', sessionId, options),
 
-  // Event listeners
-  onFileUploaded: (callback: (result: FileParseResult) => void) => {
-    ipcRenderer.on('file-uploaded', (_, result) => callback(result));
-  },
+  // Event listeners. Each returns an unsubscribe function that removes ONLY
+  // the listener it registered (not every listener on the channel), so
+  // components can clean up independently without clobbering each other.
+  onFileUploaded: (callback: (result: FileParseResult) => void) =>
+    subscribe('file-uploaded', callback),
 
-  onCheckProgress: (callback: (progress: BulkCheckProgress) => void) => {
-    ipcRenderer.on('check-progress', (_, progress) => callback(progress));
-  },
+  onCheckProgress: (callback: (progress: BulkCheckProgress) => void) =>
+    subscribe('check-progress', callback),
 
-  onCheckCompleted: (callback: (session: CheckSession) => void) => {
-    ipcRenderer.on('check-completed', (_, session) => callback(session));
-  },
+  onCheckCompleted: (callback: (session: CheckSession) => void) =>
+    subscribe('check-completed', callback),
 
-  onRateLimitUpdate: (callback: (rateLimitInfo: RateLimitInfo) => void) => {
-    ipcRenderer.on('rate-limit-update', (_, rateLimitInfo) =>
-      callback(rateLimitInfo)
-    );
-  },
+  onRateLimitUpdate: (callback: (rateLimitInfo: RateLimitInfo) => void) =>
+    subscribe('rate-limit-update', callback),
 
-  onSettingsUpdated: (callback: (settings: AppSettings) => void) => {
-    ipcRenderer.on('settings-updated', (_, settings) => callback(settings));
-  },
+  onSettingsUpdated: (callback: (settings: AppSettings) => void) =>
+    subscribe('settings-updated', callback),
 
   onExportCompleted: (
     callback: (result: {
@@ -100,17 +126,16 @@ const electronAPI = {
       filePath?: string;
       error?: string;
     }) => void
-  ) => {
-    ipcRenderer.on('export-completed', (_, result) => callback(result));
-  },
+  ) => subscribe('export-completed', callback),
 
-  onShowExportDialog: (callback: () => void) => {
-    ipcRenderer.on('show-export-dialog', () => callback());
-  },
+  onShowExportDialog: (callback: () => void) =>
+    subscribe('show-export-dialog', () => callback()),
 
-  // Remove event listeners
+  // Remove every listener on a known channel (whitelisted to our own channels).
   removeAllListeners: (channel: string) => {
-    ipcRenderer.removeAllListeners(channel);
+    if (ALLOWED_EVENT_CHANNELS.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
   },
 
   // Utility functions

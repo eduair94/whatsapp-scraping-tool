@@ -1,4 +1,5 @@
 import { WhatsAppChecker } from 'whatsapp-number-checker';
+import { categoryOf } from '../shared/categorize';
 import {
   AppSettings,
   BulkCheckOptions,
@@ -12,24 +13,19 @@ export class WhatsAppService {
   private isCancelled: boolean = false;
 
   constructor(settings: AppSettings) {
-    console.log('Settings', settings);
     this.checker = new WhatsAppChecker({
       apiKey: settings.apiKey,
       throwOnLimit: settings.throwOnLimit || false,
       timeout: settings.timeout || 15000,
       maxRetries: settings.maxRetries || 3,
       retryDelay: settings.retryDelay || 1000,
-      baseURL: 'https://whatsapp-data1.p.rapidapi.com',
+      baseURL: settings.baseURL || 'https://whatsapp-data1.p.rapidapi.com',
     });
   }
 
   async checkSingle(phoneNumber: string): Promise<WhatsAppCheckResult> {
     try {
-      console.log('Checking phone number:', phoneNumber);
-
       const result = await this.checker.checkNumber(phoneNumber);
-      console.log('API result:', result);
-
       return {
         number: phoneNumber,
         data: result.data,
@@ -37,7 +33,6 @@ export class WhatsAppService {
         rateLimitInfo: result.rateLimitInfo,
       } as WhatsAppCheckResult;
     } catch (error) {
-      console.error('Error in checkSingle:', error);
       return {
         number: phoneNumber,
         data: null,
@@ -82,15 +77,16 @@ export class WhatsAppService {
 
           completed = completedCount;
 
-          // Count successful/failed checks
-          if (current.data && !('error' in current.data)) {
-            const data = current.data as any;
-            if (data.isWAContact) {
-              successful++;
-            } else {
-              failed++;
-            }
-          } else {
+          // Count using the shared categorizer so live progress agrees with the
+          // final session stats. Rate-limited / pending are intentionally not
+          // counted as successful or failed.
+          const category = categoryOf(current);
+          if (category === 'active') {
+            successful++;
+          } else if (
+            category === 'not_on_whatsapp' ||
+            category === 'api_error'
+          ) {
             failed++;
           }
 
@@ -116,18 +112,19 @@ export class WhatsAppService {
             options.onProgress(progress);
           }
 
-          // Store result
+          // Store result, stamping the check time once at creation so it
+          // survives subsequent session saves.
           results.push({
             number: current.number,
             data: current.data,
             error: current.error,
             rateLimitInfo: current.rateLimitInfo,
+            checkedAt: new Date().toISOString(),
           });
         },
         onRateLimit: (rateLimitInfo) => {
           rateLimited++;
           if (options.onRateLimit) {
-            console.log('Ratelimit info', rateLimitInfo);
             options.onRateLimit(rateLimitInfo);
           }
         },
@@ -135,21 +132,18 @@ export class WhatsAppService {
         maxRetries: options.maxRetries,
       });
 
-      // Call completion callback
-      if (options.onComplete && !this.isCancelled) {
-        options.onComplete(results);
-      }
-
       return results;
     } catch (error) {
+      // Swallow the error but keep partial results; persistence happens in the
+      // `finally` block so a cancelled or failed run is never left dangling.
       console.error('Bulk check error:', error);
-
-      // If we have partial results, return them
-      if (results.length > 0) {
-        return results;
+      return results;
+    } finally {
+      // Always persist what we have — including on cancellation — so the
+      // session is never stuck at `running` on disk.
+      if (options.onComplete) {
+        await options.onComplete(results);
       }
-
-      throw error;
     }
   }
 

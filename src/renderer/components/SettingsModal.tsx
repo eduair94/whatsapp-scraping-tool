@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AppSettings } from '../types';
+import { useModalClose } from '../hooks/useModalClose';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -16,6 +17,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<Partial<AppSettings>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useModalClose(isOpen, onClose);
 
   useEffect(() => {
     if (settings) {
@@ -59,12 +62,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  const handleInputChange = (field: keyof AppSettings, value: any) => {
+  const handleInputChange = (
+    field: keyof AppSettings,
+    value: string | number | boolean
+  ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: '' }));
     }
+  };
+
+  // Parse a numeric input, ignoring transient empty/NaN values.
+  const handleNumberChange = (field: keyof AppSettings, raw: string) => {
+    if (raw === '') return;
+    const parsed = parseInt(raw, 10);
+    if (Number.isNaN(parsed)) return;
+    handleInputChange(field, parsed);
   };
 
   if (!isOpen) return null;
@@ -79,14 +93,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         ></div>
 
         {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="settings-modal-title"
+          className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        >
           <form onSubmit={handleSubmit}>
             <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-medium text-gray-900">Settings</h3>
+                <h3
+                  id="settings-modal-title"
+                  className="text-lg font-medium text-gray-900"
+                >
+                  Settings
+                </h3>
                 <button
                   type="button"
                   onClick={onClose}
+                  aria-label="Close settings"
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <svg
@@ -145,7 +170,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     min="0"
                     value={formData.maxRetries ?? 3}
                     onChange={(e) =>
-                      handleInputChange('maxRetries', parseInt(e.target.value))
+                      handleNumberChange('maxRetries', e.target.value)
                     }
                     className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       errors.maxRetries ? 'border-red-300' : 'border-gray-300'
@@ -172,7 +197,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     min="0"
                     value={formData.retryDelay ?? 1000}
                     onChange={(e) =>
-                      handleInputChange('retryDelay', parseInt(e.target.value))
+                      handleNumberChange('retryDelay', e.target.value)
                     }
                     className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       errors.retryDelay ? 'border-red-300' : 'border-gray-300'
@@ -199,7 +224,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     min="1000"
                     value={formData.timeout ?? 10000}
                     onChange={(e) =>
-                      handleInputChange('timeout', parseInt(e.target.value))
+                      handleNumberChange('timeout', e.target.value)
                     }
                     className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       errors.timeout ? 'border-red-300' : 'border-gray-300'
@@ -226,10 +251,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     min="1"
                     value={formData.concurrentRequests ?? 5}
                     onChange={(e) =>
-                      handleInputChange(
-                        'concurrentRequests',
-                        parseInt(e.target.value)
-                      )
+                      handleNumberChange('concurrentRequests', e.target.value)
                     }
                     className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       errors.concurrentRequests

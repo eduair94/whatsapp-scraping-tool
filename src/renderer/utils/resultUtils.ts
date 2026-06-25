@@ -1,9 +1,5 @@
-import {
-  WhatsAppResult,
-  WhatsappPersonResponse,
-  WhatsappBusinessResponse,
-  CheckSession,
-} from '../types';
+import { WhatsAppResult, CheckSession } from '../types';
+import { categoryOf, ResultCategory } from '../../shared/categorize';
 
 export interface ResultCategorization {
   activeResults: WhatsAppResult[];
@@ -53,52 +49,12 @@ export function categorizeResults(
 }
 
 /**
- * Determines the category of a WhatsApp result
+ * Determines the category of a WhatsApp result. Delegates to the shared,
+ * dependency-free categorizer so the renderer and the Electron main process
+ * stay in lock-step.
  */
-export function getResultCategory(
-  result: WhatsAppResult
-): 'active' | 'not_on_whatsapp' | 'api_error' | 'pending' | 'rate_limited' {
-  // If no data, it's pending
-  if (!result.data) {
-    return 'pending';
-  }
-
-  // If data has error property, check what kind of error
-  if ('error' in result.data && result.data.error) {
-    // Check if it's a rate limit error
-    if (
-      result.error?.toLowerCase().includes('rate limit') ||
-      result.data.error.toLowerCase().includes('rate limit')
-    ) {
-      return 'rate_limited';
-    }
-
-    // Check if it's a "not found" or "not on WhatsApp" error
-    const errorMsg = result.data.error.toLowerCase();
-    if (
-      errorMsg.includes('not found') ||
-      errorMsg.includes('not on whatsapp') ||
-      errorMsg.includes('user not found') ||
-      errorMsg.includes('number not found') ||
-      errorMsg.includes("whatsapp number doesn't exist") ||
-      errorMsg.includes('does not exist') ||
-      errorMsg.includes("doesn't exist")
-    ) {
-      return 'not_on_whatsapp';
-    }
-
-    // Otherwise it's an API error (network issues, auth failures, etc.)
-    return 'api_error';
-  }
-
-  // If we have valid data with WhatsApp contact info
-  const data = result.data as WhatsappPersonResponse | WhatsappBusinessResponse;
-  if (data.isWAContact || data.isUser) {
-    return 'active';
-  }
-
-  // If data exists but isWAContact is false
-  return 'not_on_whatsapp';
+export function getResultCategory(result: WhatsAppResult): ResultCategory {
+  return categoryOf(result);
 }
 
 /**
@@ -178,7 +134,15 @@ export function updateSessionStatistics(
   return {
     ...session,
     successfulChecks: categorization.activeResults.length,
-    completedNumbers: results.length - categorization.pendingResults.length,
+    notOnWhatsAppChecks: categorization.notOnWhatsAppResults.length,
+    apiErrorChecks: categorization.apiErrorResults.length,
+    rateLimitedChecks: categorization.rateLimitedResults.length,
+    // A number is "completed" once it has a definitive answer. Pending (never
+    // returned) and rate-limited (throttled, must be retried) do not count.
+    completedNumbers:
+      results.length -
+      categorization.pendingResults.length -
+      categorization.rateLimitedResults.length,
     // Keep failedChecks for backward compatibility (sum of not_on_whatsapp + api_error)
     failedChecks:
       categorization.notOnWhatsAppResults.length +

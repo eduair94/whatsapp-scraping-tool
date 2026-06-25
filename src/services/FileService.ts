@@ -225,82 +225,75 @@ export class FileService {
     return processed;
   }
 
-  private validateAndCleanPhoneNumber(phoneNumber: string): PhoneNumberData {
+  // Default regions tried (in order) for numbers given in national format.
+  private static readonly DEFAULT_REGIONS = [
+    'US',
+    'GB',
+    'CA',
+    'AU',
+    'DE',
+    'FR',
+    'ES',
+    'IT',
+    'BR',
+    'IN',
+  ];
+
+  private tryParse(text: string, region?: string): PhoneNumber | null {
     try {
-      // Try to parse with different default regions
-      const regions = [
-        'US',
-        'GB',
-        'CA',
-        'AU',
-        'DE',
-        'FR',
-        'ES',
-        'IT',
-        'BR',
-        'IN',
-      ];
-      let parsedNumber: PhoneNumber | null = null;
-      let usedRegion = '';
+      const parsed = region
+        ? this.phoneUtil.parse(text, region)
+        : this.phoneUtil.parse(text);
+      return this.phoneUtil.isValidNumber(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
 
-      // First try parsing as international number
-      try {
-        // clean digits from phone number and add a + at the start
-        const cleaned = phoneNumber.replace(/\D/g, '');
-        if (cleaned) {
-          phoneNumber = `+${cleaned}`;
-        }
-        parsedNumber = this.phoneUtil.parse(phoneNumber);
-        usedRegion = this.phoneUtil.getRegionCodeForNumber(parsedNumber) || '';
-      } catch {
-        // If that fails, try with different default regions
-        for (const region of regions) {
-          try {
-            parsedNumber = this.phoneUtil.parse(phoneNumber, region);
-            if (this.phoneUtil.isValidNumber(parsedNumber)) {
-              usedRegion = region;
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
+  private validateAndCleanPhoneNumber(phoneNumber: string): PhoneNumberData {
+    // Preserve exactly what the user provided; never mutate `original`.
+    const original = phoneNumber.trim();
+    const digits = original.replace(/\D/g, '');
+    const hasPlus = original.startsWith('+');
+
+    let parsedNumber: PhoneNumber | null = null;
+
+    // 1. Explicitly international (leading +): trust the country code.
+    if (hasPlus && digits) {
+      parsedNumber = this.tryParse(`+${digits}`);
+    }
+
+    // 2. National format: try the default regions and take the first that is
+    //    a valid number for that region (US first, matching the app's examples).
+    if (!parsedNumber) {
+      for (const region of FileService.DEFAULT_REGIONS) {
+        parsedNumber = this.tryParse(original, region);
+        if (parsedNumber) break;
       }
+    }
 
-      if (!parsedNumber) {
-        throw new Error('Could not parse phone number');
-      }
+    // 3. Last resort: treat the bare digits as an international number even
+    //    without a leading + (e.g. a pasted "447911123456").
+    if (!parsedNumber && digits) {
+      parsedNumber = this.tryParse(`+${digits}`);
+    }
 
-      const isValid = this.phoneUtil.isValidNumber(parsedNumber);
-
-      if (!isValid) {
-        throw new Error('Phone number is not valid');
-      }
-
-      // Format the number in international format
-      const cleaned = this.phoneUtil.format(
-        parsedNumber,
-        PhoneNumberFormat.E164
-      );
-      const country =
-        this.phoneUtil.getRegionCodeForNumber(parsedNumber) || usedRegion;
-      const countryCode = parsedNumber.getCountryCode()?.toString();
-
+    if (!parsedNumber) {
       return {
-        original: phoneNumber,
-        cleaned,
-        country,
-        countryCode,
-        isValid: true,
-      };
-    } catch (error) {
-      return {
-        original: phoneNumber,
-        cleaned: phoneNumber,
+        original,
+        cleaned: original,
         isValid: false,
-        error: error instanceof Error ? error.message : 'Validation failed',
+        error: 'Phone number is not valid',
       };
     }
+
+    return {
+      original,
+      cleaned: this.phoneUtil.format(parsedNumber, PhoneNumberFormat.E164),
+      country: this.phoneUtil.getRegionCodeForNumber(parsedNumber) || '',
+      countryCode: parsedNumber.getCountryCode()?.toString(),
+      isValid: true,
+    };
   }
 
   async exportResults(
