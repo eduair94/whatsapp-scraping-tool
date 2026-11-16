@@ -46,7 +46,8 @@ describe('demo records', () => {
   it('are stable per number, invented, and never look like an empty avatar', () => {
     expect(demoRecord('12125550147')).toEqual(demoRecord('12125550147'));
     const seen = new Set<string>();
-    for (const n of sampleNumbers(400)) {
+    // Every sample number, so the four kinds of answer are always all there.
+    for (const n of sampleNumbers(MAX_SAMPLE_NUMBERS)) {
       const { status, body } = demoRecord(n.e164!.slice(1));
       seen.add(`${status}:${body.exists}:${body.isBusiness}`);
       const text = JSON.stringify(body);

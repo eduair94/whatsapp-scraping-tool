@@ -54,7 +54,7 @@ jobs:
         shell: pwsh
         run: |
           Start-Process -Wait -FilePath release\whatsapp-number-checker-windows-setup.exe -ArgumentList '/S', '/currentuser'
-          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter 'whatsapp-number-checker.exe' | Select-Object -First 1
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter 'WhatsApp Number Checker.exe' | Select-Object -First 1
           if (-not $exe) { throw 'The installer did not install the app.' }
           Write-Output "Installed: $($exe.FullName)"
           node scripts/smoke.mjs $exe.FullName

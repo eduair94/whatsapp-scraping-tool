@@ -90,7 +90,6 @@
   "build": {
     "appId": "io.github.eduair94.whatsappnumberchecker",
     "productName": "WhatsApp Number Checker",
-    "executableName": "whatsapp-number-checker",
     "copyright": "Copyright © 2026 Eduardo Airaudo",
     "directories": {
       "output": "release",
@@ -145,6 +144,7 @@
       "artifactName": "whatsapp-number-checker-mac-${arch}.${ext}"
     },
     "linux": {
+      "executableName": "whatsapp-number-checker",
       "target": [
         {
           "target": "AppImage",
