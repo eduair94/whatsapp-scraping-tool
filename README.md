@@ -139,6 +139,14 @@ npm run dist      # installers for your system, in release/
 
 How the code is organised, and how to send a change: [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Its sister app
+
+[Country Profile Pictures](https://github.com/eduair94/country-profile-pics)
+works the other way round: instead of checking a list you already have, it
+downloads every stored profile picture of a country that matches your filters,
+with a CSV of every field. A direct key works in both apps, they share one look,
+and both are free and open source.
+
 ## Use it responsibly
 
 Check numbers you have a reason to hold: your customers, your own leads, a list
