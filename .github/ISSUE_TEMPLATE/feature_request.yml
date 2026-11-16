@@ -1,0 +1,16 @@
+name: An idea
+description: Something the app could do, or do better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you are trying to do
+      description: The job, in your words. For example "I clean lead lists every week and need to keep only business accounts".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How the app could make that easier.

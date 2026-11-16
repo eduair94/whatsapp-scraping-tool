@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: User guide
+    url: https://github.com/eduair94/whatsapp-scraping-tool/blob/master/docs/GUIDE.md
+    about: Installing, your key, checking a list and exporting, step by step, with a troubleshooting section.
+  - name: API keys and plans
+    url: https://whatsapp.checkleaked.cc/api
+    about: Questions about a key, its quota or its plan.
+  - name: Security problem
+    url: https://github.com/eduair94/whatsapp-scraping-tool/security/advisories/new
+    about: Report it privately, please.

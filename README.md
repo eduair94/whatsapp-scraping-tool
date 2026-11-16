@@ -1,389 +1,152 @@
-# 📱 WhatsApp Number Checker Tool
+# WhatsApp Number Checker
 
-<div align="center">
+Find out which numbers of a list are on WhatsApp, and what their profiles say:
+name, about, profile picture, and the whole business profile. Open a CSV or
+Excel file (or paste the numbers), start the check, and export the answers to
+Excel, CSV or JSON. A free, open-source desktop app for Windows, macOS and
+Linux.
 
-![WhatsApp Checker Logo](./assets/icon.svg)
+![A finished check: every number has its mark, the totals sit on top and the strip on the right holds the whole list](docs/images/04-results.png)
 
-**A powerful Electron-based desktop application to verify WhatsApp numbers in bulk with a beautiful, user-friendly interface.**
+## Download
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://reactjs.org/)
-[![Electron](https://img.shields.io/badge/Electron-191970?logo=Electron&logoColor=white)](https://www.electronjs.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+| System | |
+| --- | --- |
+| Windows 10 and 11 | [Installer](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest/download/whatsapp-number-checker-windows-setup.exe) · [Portable, no install](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest/download/whatsapp-number-checker-windows-portable.exe) |
+| macOS 12 and later | [Apple silicon (M1 and later)](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest/download/whatsapp-number-checker-mac-arm64.dmg) · [Intel](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest/download/whatsapp-number-checker-mac-x64.dmg) |
+| Linux, 64-bit | [.deb for Ubuntu, Debian, Mint](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest/download/whatsapp-number-checker-linux-x64.deb) · [AppImage, any distribution](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest/download/whatsapp-number-checker-linux-x64.AppImage) |
 
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Screenshots](#-screenshots) • [Contributing](#-contributing)
+All files and their checksums are on the [latest release](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest).
+More about the app: [whatsapp.checkleaked.cc/bulk-checker-app](https://whatsapp.checkleaked.cc/bulk-checker-app).
 
-</div>
+**First time?** The [user guide](docs/GUIDE.md) walks through installing on each
+system, your key, adding numbers, checking, reading the results and exporting,
+with screenshots. To look around without a key, open **Help → Try the Demo**.
 
----
+The builds are not code-signed yet, so each system asks once:
 
-## 🌟 Features
+- **Windows**: "Windows protected your PC" → **More info → Run anyway**.
+- **macOS 15 and later**: after the first try, **System Settings → Privacy &
+  Security → Open Anyway**. On macOS 14 and earlier, right-click the app →
+  **Open** → **Open**. If it says the app is damaged, run
+  `xattr -dr com.apple.quarantine "/Applications/WhatsApp Number Checker.app"` once.
+- **Linux**: `sudo apt install ./whatsapp-number-checker-linux-x64.deb`, or
+  `chmod +x` the AppImage and run it (it needs FUSE 2, `libfuse2t64` on
+  Ubuntu 24.04).
 
-### ✨ **Core Functionality**
-- 🔍 **Bulk WhatsApp Verification** - Check thousands of phone numbers at once
-- 📁 **Multiple Input Methods** - Upload CSV/Excel files, paste numbers, or generate random test numbers
-- 🌍 **International Support** - Validate phone numbers from any country with proper formatting
-- ⚡ **Real-time Processing** - Live progress tracking with rate limit monitoring
-- 📊 **Detailed Results** - Export verified numbers with complete WhatsApp profile information
+## What it does
 
-### 🎨 **Modern Interface**
-- 🖥️ **Beautiful Desktop App** - Native Electron application with sleek design
-- 📱 **Responsive Layout** - Optimized for different screen sizes and resolutions
-- 🎯 **Intuitive Workflow** - Step-by-step process with clear visual feedback
-- 🔔 **Smart Notifications** - Toast notifications for all important actions
-- 📈 **Session Management** - Track and manage multiple checking sessions with history
+- **Reads your list as it is.** CSV, Excel (`.xlsx`, `.xls`), text or a paste.
+  When a file has several columns, the phone column is found for you. Numbers
+  written without a country code are read as numbers of the country you choose,
+  duplicates are removed, and anything that is not a phone number is set aside
+  with the reason, before a single request is spent.
+- **One mark per number.** Every answer is one of five: On WhatsApp, Not on
+  WhatsApp, Not in database, Invalid number or Failed. They are never merged, so
+  "the request failed" is never mistaken for "not on WhatsApp".
+- **The whole profile.** Name, about (and when it was set), profile picture,
+  personal or business account, and for businesses: category, description,
+  email, websites, address with a map link, opening hours, member since,
+  verification, linked Instagram or Facebook, product catalog. Plus the about
+  texts and pictures earlier checks saw.
+- **Pictures you can actually look at.** A thumbnail on every row, a larger one
+  in the details, a full-size viewer that steps through the whole list with the
+  arrow keys, and a picture wall of every profile at once. Save any picture with
+  one click.
+- **Never loses work.** Each answer is written to disk the moment it arrives.
+  Stop whenever you like (or lose power): **Continue** asks only the numbers
+  without an answer, and failed ones are asked again.
+- **Never spends what you did not ask for.** One check at a time, at the pace
+  the API allows. A rejected key, an empty quota or a broken connection stops
+  the check with the reason, instead of burning through the list.
+- **Exports that open cleanly.** Excel, CSV (with a byte-order mark, so accents
+  and emoji survive) or JSON, all numbers or one outcome, every field in its own
+  column. Text a spreadsheet could run as a formula is neutralised.
+- **Your key stays yours.** It is stored encrypted by the operating system
+  (DPAPI, Keychain or a Linux keyring) and sent only to the API. The app has no
+  telemetry and no account.
+- **Light and dark**, following your system or your choice.
 
-### ⚙️ **Advanced Features**
-- 🛡️ **Rate Limit Protection** - Built-in safeguards to prevent API abuse
-- 💾 **Session Persistence** - Save and resume checking sessions
-- 📋 **Flexible Export** - Export results in multiple formats (Excel, CSV)
-- 🔄 **Retry Logic** - Automatic retry for failed checks
-- 📝 **Detailed Logging** - Complete audit trail of all operations
+<table>
+  <tr>
+    <td><img src="docs/images/05-details.png" alt="The details of a business: picture, name, account and verification"></td>
+    <td><img src="docs/images/07-pictures.png" alt="The picture wall: every profile picture of the list"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/03-checking.png" alt="A check running: the strip fills as answers arrive"></td>
+    <td><img src="docs/images/06-picture.png" alt="A profile picture at full size in the viewer"></td>
+  </tr>
+</table>
 
----
+## Your API key
 
-## 🚀 Quick Start
+The app asks the WhatsApp Data API about each number. Any of these keys works;
+the app recognises a direct key by its shape, and **Settings → Where the key is
+sent** chooses between the two RapidAPI listings.
 
-### Prerequisites
+| Key | Where to get it | What each answer carries |
+| --- | --- | --- |
+| Direct key (`wapi_…`) | [whatsapp.checkleaked.cc/api](https://whatsapp.checkleaked.cc/api) | A live check with the full profile and picture. The app also shows the key's remaining requests and expiry. |
+| RapidAPI: Number Validator | [rapidapi.com/airaudoeduardo/api/whatsapp-number-validator18](https://rapidapi.com/airaudoeduardo/api/whatsapp-number-validator18) | A live check that answers on WhatsApp or not, without profile data. |
+| RapidAPI: DB Only | [rapidapi.com/airaudoeduardo/api/wp-data-db-only](https://rapidapi.com/airaudoeduardo/api/wp-data-db-only) | Profiles from the database, without a live check. A number can be missing from it ("Not in database"). |
 
-Before you begin, ensure you have the following installed:
-- **Node.js** (v16.0.0 or higher) - [Download here](https://nodejs.org/)
-- **npm** or **yarn** package manager
-- **Git** for cloning the repository
+Every number costs one request, whatever the answer. The app tells you how many
+requests a list will use, and roughly how long it takes, before you start.
 
-### Installation
+## What changed in version 2
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/whatsapp-scrapping-tool.git
-   cd whatsapp-scrapping-tool
-   ```
+Version 1 stopped working on 4 November 2026, when the RapidAPI listing it was
+built on (`whatsapp-data1`) was removed: every check failed. Version 2 is a
+rewrite of the engine and the window, and fixes what was broken in 1.x:
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+- **Cancel did not stop.** The old engine kept checking (and spending requests)
+  after Cancel, and its late answers could overwrite the next check. Stop now
+  aborts the request in flight and nothing is asked after it.
+- **Results were lost.** Starring or pausing a session saved a summary over the
+  full results, opening an old session could crash, and resuming replaced
+  earlier answers. Sessions are now append-only files that are never rewritten.
+- **The key was saved in plain text** inside every session file. It now lives
+  only in the encrypted settings; the first start of 2.0 migrates your old
+  sessions and removes the key from the old files.
+- **National numbers were guessed** against ten countries in a fixed order,
+  filing some under the wrong country. They are read against the one country
+  you choose.
+- **Exports could run formulas** written in a stranger's profile, and broke
+  accents in Excel.
+- **The window froze** during checks: the old dependency waited in a busy loop.
+- Settings that did nothing (theme, concurrency, auto-export) are gone or work.
 
-3. **Build the application**
-   ```bash
-   npm run build
-   ```
+Details in the [changelog](CHANGELOG.md).
 
-4. **Start the application**
-   ```bash
-   npm start
-   ```
+## Build it yourself
 
-### Development Mode
-
-For development with hot reload:
-
-```bash
-# Start the development server
-npm run dev
-```
-
----
-
-## 📖 How to Use
-
-### 1. **Getting Started**
-
-When you first open the application, you'll see the welcome screen with three main options:
-
-- **📁 Upload File** - Import phone numbers from CSV or Excel files
-- **📋 Paste Numbers** - Enter numbers manually or paste from clipboard  
-- **🎲 Generate Random** - Create test numbers for demo purposes
-
-### 2. **Upload Phone Numbers**
-
-#### From File:
-1. Click **"Choose File"** or drag and drop your file
-2. Supported formats: `.csv`, `.txt`, `.xlsx`, `.xls`
-3. The tool will automatically detect and parse phone numbers
-4. Invalid numbers are flagged with error details
-
-#### Manual Entry:
-1. Click on **"Paste Numbers"** section
-2. Enter numbers one per line or comma-separated
-3. Use the clipboard button to paste directly
-4. Numbers are validated in real-time
-
-#### Example formats supported:
-```
-+1234567890
-(123) 456-7890
-123-456-7890
-+44 20 7946 0958
-```
-
-### 3. **Preview and Validate**
-
-After uploading, you'll see:
-- **📊 Summary Statistics** - Total numbers, valid vs invalid counts
-- **📋 Number List** - Detailed view of all numbers with validation status
-- **🌍 Country Detection** - Automatic country code identification
-- **⚠️ Error Details** - Specific validation errors for invalid numbers
-
-### 4. **Configure Settings**
-
-Before starting the check:
-- **🔑 API Configuration** - Set your WhatsApp API credentials
-- **⏱️ Rate Limits** - Adjust checking speed to avoid rate limits
-- **📊 Export Options** - Choose output format and fields
-- **🔄 Retry Settings** - Configure retry attempts for failed checks
-
-### 5. **Start Checking**
-
-1. Click **"Start Checking"** to begin verification
-2. Monitor real-time progress with:
-   - Progress bar showing completion percentage
-   - Live count of successful/failed checks
-   - Rate limit status and remaining quota
-   - Estimated time remaining
-
-### 6. **View Results**
-
-After completion:
-- **📈 Results Summary** - Overview of all checked numbers
-- **✅ Verified Numbers** - List of active WhatsApp accounts
-- **❌ Invalid Numbers** - Numbers not on WhatsApp
-- **📋 Detailed Information** - Profile data, business accounts, etc.
-
-### 7. **Export Data**
-
-Export your results in multiple formats:
-- **📊 Excel (.xlsx)** - Complete data with formatting
-- **📄 CSV** - Simple comma-separated values
-- **📋 JSON** - Structured data for developers
-
----
-
-## 📸 Screenshots
-
-### Welcome Screen
-*Clean, intuitive interface with multiple input options*
-
-### File Upload
-*Drag and drop functionality with format validation*
-
-### Number Preview
-*Detailed validation with country detection and error handling*
-
-### Live Checking
-*Real-time progress monitoring with rate limit tracking*
-
-### Results Dashboard
-*Comprehensive results view with export options*
-
-### Session History
-*Track and manage multiple checking sessions*
-
----
-
-## 🛠️ Technical Stack
-
-### Frontend
-- **React 18** - Modern React with hooks and TypeScript
-- **TypeScript** - Type-safe JavaScript development
-- **Tailwind CSS** - Utility-first CSS framework
-- **Heroicons** - Beautiful SVG icons
-- **React Hot Toast** - Elegant notification system
-
-### Backend/Desktop
-- **Electron** - Cross-platform desktop app framework
-- **Node.js** - JavaScript runtime for backend operations
-- **WhatsApp Number Checker API** - Third-party verification service
-
-### Development Tools
-- **Webpack** - Module bundler and development server
-- **ESLint** - Code linting and formatting
-- **Prettier** - Code formatting
-- **TypeScript Compiler** - Type checking and compilation
-
-### Libraries & Utilities
-- **google-libphonenumber** - International phone number validation
-- **xlsx** - Excel file reading and writing
-- **csv-parser** - CSV file parsing
-- **clsx** - Conditional CSS class management
-
----
-
-## 📁 Project Structure
+You need Node.js 22 or later.
 
 ```
-whatsapp-scrapping-tool/
-├── 📁 src/
-│   ├── 📁 main/               # Electron main process
-│   │   └── main.ts            # Application entry point
-│   ├── 📁 renderer/           # React frontend
-│   │   ├── App.tsx            # Main application component
-│   │   ├── 📁 components/     # Reusable UI components
-│   │   ├── 📁 hooks/          # Custom React hooks
-│   │   ├── 📁 managers/       # Business logic managers
-│   │   ├── 📁 services/       # API and data services
-│   │   └── 📁 types/          # TypeScript type definitions
-│   └── preload.ts             # Electron preload script
-├── 📁 assets/                 # Static assets and icons
-├── 📁 dist/                   # Compiled output
-├── package.json               # Project dependencies and scripts
-├── tsconfig.json              # TypeScript configuration
-├── webpack.config.js          # Webpack build configuration
-└── tailwind.config.js         # Tailwind CSS configuration
-```
-
----
-
-## ⚙️ Configuration
-
-### API Setup
-
-1. **Get WhatsApp API Key**
-   - Sign up for a WhatsApp number verification service
-   - Popular options: RapidAPI, APILayer, or custom solutions
-   - Obtain your API key and endpoint URL
-
-2. **Configure in Application**
-   - Open Settings in the application
-   - Enter your API credentials
-   - Test the connection before bulk checking
-
-### Rate Limiting
-
-To avoid being blocked:
-- **Default**: 10 requests per minute
-- **Recommended**: Start slow and increase gradually
-- **Monitor**: Watch for rate limit warnings
-- **Adjust**: Reduce speed if errors occur
-
----
-
-## 🔧 Development
-
-### Building from Source
-
-```bash
-# Install dependencies
+git clone https://github.com/eduair94/whatsapp-scraping-tool.git
+cd whatsapp-scraping-tool
 npm install
-
-# Development mode with hot reload
-npm run dev
-
-# Build for production
-npm run build
-
-# Run tests
-npm test
-
-# Lint code
-npm run lint
-
-# Format code
-npm run format
+npm run demo      # the app in demo mode: sample numbers, simulated answers
+npm start         # the app with your own key
+npm test          # the engine's tests
+npm run dist      # installers for your system, in release/
 ```
 
-### Creating Distributables
+How the code is organised, and how to send a change: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-```bash
-# Build executable for your platform
-npm run dist
+## Use it responsibly
 
-# Build for specific platforms
-npm run dist:win    # Windows
-npm run dist:mac    # macOS
-npm run dist:linux  # Linux
-```
+Check numbers you have a reason to hold: your customers, your own leads, a list
+you are cleaning. Before you message anyone on WhatsApp, make sure they agreed
+to it; WhatsApp's own rules and data-protection laws such as the GDPR require
+it. Anyone can hide their number from the database at
+[whatsapp.checkleaked.cc/opt-out](https://whatsapp.checkleaked.cc/opt-out).
 
----
+The app shows what the API returns about a profile and nothing more. It never
+shows the API's automated guesses about the people in a picture, such as age or
+gender.
 
-## 📊 Performance
+## License
 
-### Checking Speed
-- **Average**: 50-100 numbers per minute
-- **Factors**: API rate limits, network speed, number format
-- **Optimization**: Batch processing, connection pooling
-
-### Memory Usage
-- **Idle**: ~50MB RAM
-- **Processing**: ~100-200MB RAM (depending on dataset size)
-- **Large Files**: Efficient streaming for 10k+ numbers
-
-### File Size Limits
-- **CSV/TXT**: Up to 50MB
-- **Excel**: Up to 25MB
-- **Numbers**: Tested with 100k+ numbers
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### Development Workflow
-
-1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
-3. **Commit** your changes: `git commit -m 'Add amazing feature'`
-4. **Push** to the branch: `git push origin feature/amazing-feature`
-5. **Open** a Pull Request
-
-### Code Style
-
-- Use **TypeScript** for all new code
-- Follow **ESLint** and **Prettier** configurations
-- Write **tests** for new features
-- Update **documentation** as needed
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **WhatsApp** - For providing the messaging platform
-- **React Team** - For the amazing frontend framework
-- **Electron Team** - For enabling cross-platform desktop apps
-- **Contributors** - Thanks to all who help improve this project
-
----
-
-## 📞 Support
-
-### Getting Help
-
-- **📖 Documentation** - Check this README first
-- **🐛 Bug Reports** - [Open an issue](https://github.com/yourusername/whatsapp-scrapping-tool/issues)
-- **💡 Feature Requests** - [Request a feature](https://github.com/yourusername/whatsapp-scrapping-tool/issues)
-- **💬 Discussions** - [Join the discussion](https://github.com/yourusername/whatsapp-scrapping-tool/discussions)
-
-### Common Issues
-
-#### "API Key Invalid"
-- Verify your API key is correct
-- Check if the service is active
-- Ensure you have sufficient credits
-
-#### "Numbers Not Loading"
-- Check file format (CSV, Excel supported)
-- Verify phone number format
-- Try with a smaller test file first
-
-#### "Application Won't Start"
-- Ensure Node.js 16+ is installed
-- Run `npm install` to update dependencies
-- Try `npm run clean` then `npm run build`
-
----
-
-<div align="center">
-
-**Made with ❤️ by the WhatsApp Checker Team**
-
-[⭐ Star this repo](https://github.com/yourusername/whatsapp-scrapping-tool) if you find it useful!
-
-</div>
+[MIT](LICENSE). WhatsApp Number Checker is an independent project. It is not
+affiliated with, endorsed by or sponsored by WhatsApp or Meta.

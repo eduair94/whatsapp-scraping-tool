@@ -1,30 +1,16 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "target": "ES2020",
-    "lib": ["ES2020"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "module": "commonjs",
+    "lib": ["ES2022", "DOM"],
+    "module": "CommonJS",
     "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
     "noEmit": false,
-    "outDir": "./dist",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    }
+    "rootDir": "./src",
+    "outDir": "./dist/main",
+    "sourceMap": false,
+    "declaration": false,
+    "removeComments": true
   },
-  "include": [
-    "src/main.ts",
-    "src/preload.ts",
-    "src/services/**/*",
-    "src/types/**/*"
-  ],
-  "exclude": ["node_modules", "dist", "src/renderer/**/*"]
+  "include": ["src/main.ts", "src/preload.ts", "src/core/**/*", "src/shared/**/*"],
+  "exclude": ["node_modules", "dist", "release", "src/**/*.test.ts", "src/renderer/**/*"]
 }

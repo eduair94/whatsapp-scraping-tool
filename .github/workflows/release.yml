@@ -1,0 +1,137 @@
+name: Release
+
+# Push a tag like v2.0.0. Every system is built, its packaged app is launched
+# once (smoke test), the files people download are installed and opened the way
+# the user guide says, and they land in a DRAFT release with checksums. The
+# draft is published by hand after a last check.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win
+          - os: macos-latest
+            args: --mac
+          - os: ubuntu-latest
+            args: --linux
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # electron-builder downloads Electron itself; no install script is needed.
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run build
+      - name: Package
+        run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Install xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb > /dev/null
+      - name: Launch the packaged app once
+        run: node scripts/smoke.mjs --unpacked
+
+      # The files people download, installed and opened the way the user guide says.
+      - name: Installer and portable app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Start-Process -Wait -FilePath release\whatsapp-number-checker-windows-setup.exe -ArgumentList '/S', '/currentuser'
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter 'whatsapp-number-checker.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'The installer did not install the app.' }
+          Write-Output "Installed: $($exe.FullName)"
+          node scripts/smoke.mjs $exe.FullName
+          if ($LASTEXITCODE) { exit 1 }
+          $uninstaller = Get-ChildItem $exe.DirectoryName -Filter 'Uninstall*.exe' | Select-Object -First 1
+          Start-Process -Wait -FilePath $uninstaller.FullName -ArgumentList '/S', '/currentuser'
+          Start-Sleep -Seconds 3
+          if (Test-Path $exe.FullName) { throw 'The uninstaller left the app behind.' }
+          node scripts/smoke.mjs release\whatsapp-number-checker-windows-portable.exe
+          if ($LASTEXITCODE) { exit 1 }
+      - name: Apple silicon disk image, copied to Applications (macOS)
+        if: runner.os == 'macOS'
+        run: scripts/check-dmg.sh release/whatsapp-number-checker-mac-arm64.dmg arm64
+      - name: The .deb, installed, with Chromium's sandbox on (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y -qq ./release/whatsapp-number-checker-linux-x64.deb > /dev/null
+          exe=$(dpkg -L whatsapp-number-checker | grep -E '^/opt/.*/whatsapp-number-checker$')
+          grep -hE '^(Name|Exec)=' /usr/share/applications/*.desktop | grep -i 'number checker' || { echo 'No menu entry was installed.'; exit 1; }
+          node scripts/smoke.mjs "$exe" --sandbox
+          sudo apt-get remove -y -qq whatsapp-number-checker > /dev/null
+          ! test -e "$exe"
+      - name: The AppImage, and its no-FUSE fallback (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x release/whatsapp-number-checker-linux-x64.AppImage
+          # The guide's way around a missing FUSE 2 (it needs no FUSE at all).
+          node scripts/smoke.mjs release/whatsapp-number-checker-linux-x64.AppImage --appimage-extract-and-run
+          sudo apt-get install -y -qq libfuse2t64 > /dev/null
+          node scripts/smoke.mjs release/whatsapp-number-checker-linux-x64.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+
+  # The Intel disk image, opened on an Intel Mac (Rosetta on the Apple silicon
+  # runner is too slow to start it reliably).
+  intel-mac:
+    needs: build
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-macOS
+          path: release
+      - name: Intel disk image, copied to Applications
+        run: scripts/check-dmg.sh release/whatsapp-number-checker-mac-x64.dmg x86_64
+
+  release:
+    needs: [build, intel-mac]
+    # A manual run on a branch only builds and checks; releases come from tags.
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Checksums
+        run: cd artifacts && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --draft --title "WhatsApp Number Checker $TAG" --notes-file .github/release-notes.md
+          gh release upload "$TAG" artifacts/* --clobber

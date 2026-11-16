@@ -1,107 +1,183 @@
 {
-  "name": "whatsapp-scrapping-tool",
-  "version": "1.0.0",
-  "description": "WhatsApp Number Checker Tool with React UI",
-  "main": "dist/main.js",
-  "scripts": {
-    "build": "npm run type-check:main && npm run type-check:renderer && npm run build:main && npm run build:renderer",
-    "build:main": "tsc --project tsconfig.main.json",
-    "build:renderer": "webpack --config webpack.config.js",
-    "build:prod": "npm run type-check:main && npm run type-check:renderer && npm run build:main && webpack --config webpack.config.js --mode production",
-    "start": "npm run build && electron .",
-    "start:dev": "npm run build && electron . --enable-logging",
-    "clean": "rimraf dist",
-    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
-    "dev:renderer": "webpack serve --config webpack.config.js --mode development",
-    "dev:main": "tsc --project tsconfig.main.json --watch",
-    "dist": "npm run build:prod && electron-builder",
-    "lint": "eslint . --ext .ts,.tsx --fix",
-    "lint:check": "eslint . --ext .ts,.tsx",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "type-check": "tsc --noEmit",
-    "type-check:renderer": "tsc --project tsconfig.renderer.json --noEmit",
-    "type-check:main": "tsc --project tsconfig.main.json --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+  "name": "whatsapp-scraping-tool",
+  "productName": "WhatsApp Number Checker",
+  "version": "2.0.0",
+  "description": "Desktop app that checks a list of phone numbers against the WhatsApp Data API: which are on WhatsApp, which are business accounts, with CSV, Excel and JSON export. Open source, resumable, your key stays on your computer.",
+  "main": "dist/main/main.js",
+  "homepage": "https://whatsapp.checkleaked.cc/bulk-checker-app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eduair94/whatsapp-scraping-tool.git"
   },
+  "bugs": {
+    "url": "https://github.com/eduair94/whatsapp-scraping-tool/issues"
+  },
+  "author": {
+    "name": "Eduardo Airaudo",
+    "url": "https://github.com/eduair94"
+  },
+  "license": "MIT",
+  "private": true,
   "keywords": [
     "whatsapp",
-    "checker",
+    "whatsapp-checker",
+    "bulk-checker",
+    "number-validator",
+    "phone-numbers",
     "electron",
+    "desktop-app",
     "react",
-    "typescript"
+    "typescript",
+    "csv-export"
   ],
-  "author": "Your Name",
-  "license": "MIT",
-  "devDependencies": {
-    "@eslint/js": "^9.36.0",
-    "@types/google-libphonenumber": "^7.4.30",
-    "@types/node": "^20.8.0",
-    "@types/react": "^18.2.25",
-    "@types/react-dom": "^18.2.11",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
-    "autoprefixer": "^10.4.21",
-    "concurrently": "^8.2.2",
-    "css-loader": "^6.8.1",
-    "electron": "^27.0.0",
-    "electron-builder": "^24.6.4",
-    "eslint": "^8.57.1",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-import-resolver-typescript": "^4.4.4",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-jsx-a11y": "^6.10.2",
-    "eslint-plugin-prettier": "^5.5.4",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "html-webpack-plugin": "^5.5.3",
-    "postcss": "^8.5.6",
-    "postcss-loader": "^8.2.0",
-    "prettier": "^3.6.2",
-    "rimraf": "^5.0.5",
-    "style-loader": "^3.3.3",
-    "ts-loader": "^9.5.0",
-    "typescript": "^5.2.2",
-    "vitest": "^2.1.9",
-    "webpack": "^5.88.2",
-    "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^4.15.1"
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "node scripts/clean.mjs main && tsc --project tsconfig.main.json",
+    "build:renderer": "webpack --mode production",
+    "start": "npm run build && electron .",
+    "demo": "npm run build && electron . --demo",
+    "dev": "npm run build:main && webpack --mode development && electron .",
+    "typecheck": "tsc --project tsconfig.main.json --noEmit && tsc --project tsconfig.renderer.json --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "icons": "node scripts/make-icons.mjs",
+    "smoke": "npm run build && node scripts/smoke.mjs --dev",
+    "smoke:dist": "node scripts/smoke.mjs",
+    "screenshots": "npm run build && electron . --screenshots=docs/images",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never"
   },
   "dependencies": {
-    "@heroicons/react": "^2.2.0",
-    "clsx": "^2.0.0",
-    "csv-parser": "^3.2.0",
-    "google-libphonenumber": "^3.2.34",
-    "lucide-react": "^0.287.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-hot-toast": "^2.4.1",
-    "tailwindcss": "^3.3.5",
-    "whatsapp-number-checker": "^1.1.0",
-    "xlsx": "^0.18.5"
+    "google-libphonenumber": "^3.2.42",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@fontsource-variable/figtree": "5.2.8",
+    "@resvg/resvg-js": "2.6.2",
+    "@types/google-libphonenumber": "^7.4.30",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "css-loader": "^7.1.2",
+    "electron": "45.2.0",
+    "electron-builder": "26.18.1",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "html-webpack-plugin": "^5.6.3",
+    "mini-css-extract-plugin": "^2.9.2",
+    "prettier": "^3.6.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^5.1.4"
   },
   "build": {
-    "appId": "com.yourcompany.whatsapp-checker",
+    "appId": "io.github.eduair94.whatsappnumberchecker",
     "productName": "WhatsApp Number Checker",
+    "executableName": "whatsapp-number-checker",
+    "copyright": "Copyright © 2026 Eduardo Airaudo",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
-      "dist/**/*",
-      "package.json"
+      "dist/**",
+      "build/icon.png",
+      "package.json",
+      "LICENSE"
     ],
+    "asar": true,
+    "afterPack": "./build/after-pack.cjs",
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "whatsapp-number-checker-windows-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "whatsapp-number-checker-windows-portable.${ext}"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "assets/icon.icns"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "artifactName": "whatsapp-number-checker-mac-${arch}.${ext}"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "assets/icon.png"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "maintainer": "Eduardo Airaudo <eduair94@users.noreply.github.com>",
+      "synopsis": "Check which phone numbers of a list are on WhatsApp",
+      "artifactName": "whatsapp-number-checker-linux-x64.${ext}"
+    },
+    "publish": null,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": false,
+      "resetAdHocDarwinSignature": true
+    },
+    "deb": {
+      "packageName": "whatsapp-number-checker"
     }
   }
 }

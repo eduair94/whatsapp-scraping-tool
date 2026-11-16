@@ -1,26 +1,21 @@
-# Dependencies
-node_modules
-
-# Build output
-dist
-release
-
-# Environment / secrets
+node_modules/
+dist/
+release/
+smoke.json
+*.log
 .env
 .env.*
-
-# Logs
-*.log
-npm-debug.log*
-
-# OS files
 .DS_Store
 Thumbs.db
-
-# Editor
 .vscode/*
 !.vscode/extensions.json
-.idea
-
-# Test / coverage
-coverage
+.idea/
+coverage/
+# impeccable working files (the design contract and DESIGN.md are committed)
+.impeccable/questions/
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/build/
+.impeccable/decision-*.json
+.impeccable/brief-*.md
+.impeccable/config.local.json

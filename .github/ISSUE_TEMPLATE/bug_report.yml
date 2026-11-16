@@ -1,0 +1,52 @@
+name: Something does not work
+description: The app shows an error, crashes, or does something you did not expect.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. Please never paste your API key here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead? Copy any message the app showed.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Settings → About shows it, for example 2.0.0.
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Windows (installer)
+        - Windows (portable)
+        - macOS, Apple silicon
+        - macOS, Intel
+        - Linux (.deb)
+        - Linux (AppImage)
+        - Built from source
+    validations:
+      required: true
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Where your key is sent
+      description: Settings → Where the key is sent.
+      options:
+        - Direct key
+        - "RapidAPI: Number Validator"
+        - "RapidAPI: DB Only"
+        - Demo mode
+        - Not sure
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: A screenshot, or a small sample of the list that shows the problem (with numbers you may share).
