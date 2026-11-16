@@ -17,7 +17,7 @@ Linux.
 | Linux, 64-bit | [.deb for Ubuntu, Debian, Mint](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest/download/whatsapp-number-checker-linux-x64.deb) · [AppImage, any distribution](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest/download/whatsapp-number-checker-linux-x64.AppImage) |
 
 All files and their checksums are on the [latest release](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest).
-More about the app: [whatsapp.checkleaked.cc/bulk-checker-app](https://whatsapp.checkleaked.cc/bulk-checker-app).
+More about the app: [whatsapp.checkleaked.cc/tools/bulk-checker-app](https://whatsapp.checkleaked.cc/tools/bulk-checker-app).
 
 **First time?** The [user guide](docs/GUIDE.md) walks through installing on each
 system, your key, adding numbers, checking, reading the results and exporting,

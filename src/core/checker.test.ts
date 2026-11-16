@@ -206,12 +206,23 @@ describe('CheckRun', () => {
     expect(missing.status).toBe('stopped');
     expect(missing.stopReason).toMatch(/Session not found/);
 
+    // The folder is deleted after the second answer, and the third lookup waits
+    // until it is gone, so the deletion never races the run's own writes.
     const meta = await session(list(5));
-    const run = new CheckRun({ store, client, sessionId: meta.id });
+    let removed: Promise<boolean> | null = null;
+    const { client: gated } = fakeClient(() => 'on_whatsapp');
+    const lookup = gated.lookup.bind(gated);
+    gated.lookup = async (number, signal) => {
+      if (removed) await removed;
+      return lookup(number, signal);
+    };
+    const run = new CheckRun({ store, client: gated, sessionId: meta.id });
     run.on('progress', (p) => {
-      if (p.counts.checked === 2) void store.remove(meta.id);
+      if (p.counts.checked === 2 && !removed) removed = store.remove(meta.id);
     });
     const end = await run.run();
-    expect(['stopped', 'completed']).toContain(end.status);
+    expect(await removed).toBe(true);
+    expect(end.status).toBe('stopped');
+    expect(end.stopReason).toMatch(/The check stopped/);
   });
 });

@@ -213,7 +213,9 @@ export class SessionStore {
     } catch {
       return false;
     }
-    await fs.promises.rm(dir, { recursive: true, force: true });
+    // A file written or briefly locked (antivirus, an open export) makes a single
+    // attempt fail with ENOTEMPTY, EBUSY or EPERM; Node retries those.
+    await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     return true;
   }
 

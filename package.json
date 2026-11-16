@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "description": "Desktop app that checks a list of phone numbers against the WhatsApp Data API: which are on WhatsApp, which are business accounts, with CSV, Excel and JSON export. Open source, resumable, your key stays on your computer.",
   "main": "dist/main/main.js",
-  "homepage": "https://whatsapp.checkleaked.cc/bulk-checker-app",
+  "homepage": "https://whatsapp.checkleaked.cc/tools/bulk-checker-app",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/eduair94/whatsapp-scraping-tool.git"
