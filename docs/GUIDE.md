@@ -422,6 +422,12 @@ country code are read as numbers of the country you chose. Choose the right one
 on **New check** (the list is read again at once), or add the country code to
 the numbers (`+44…`).
 
+**"A spreadsheet wrote this number in scientific notation."** The file holds
+`5.98E+10` where the number should be: the spreadsheet rounded it when the file
+was saved, so its last digits are gone and the app will not guess them. Open the
+original list, format the phone column as **Text** (or as a number with no
+decimals), save it again and open that file here. Version 2.0.1 or later.
+
 **"That file is open in another program."** Close it (often Excel), or save the
 export under another name.
 
