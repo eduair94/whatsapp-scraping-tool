@@ -81,6 +81,51 @@ describe('SessionStore', () => {
     expect((await store.pending(meta.id)).map((n) => n.e164)).toEqual([numbers[1].e164, numbers[2].e164]);
   });
 
+  it('starts the next answer on its own line after a torn one, so it is not lost too', async () => {
+    const meta = await store.create({ name: 'x', source: 'paste', numbers });
+    const file = path.join(root, meta.id, 'results.jsonl');
+    await store.appendResult(meta.id, result(0, 'on_whatsapp'));
+    await fs.promises.appendFile(file, '{"number":"+12125550102","outc');
+    // The app starts again and continues the list.
+    const again = new SessionStore(root);
+    await again.appendResult(meta.id, result(1, 'not_on_whatsapp'));
+    await again.appendResult(meta.id, result(2, 'on_whatsapp'));
+    expect(await again.pending(meta.id)).toEqual([]);
+    expect((await again.load(meta.id))!.results).toHaveLength(3);
+    // No blank lines when nothing was torn.
+    const clean = await store.create({ name: 'y', source: 'paste', numbers });
+    await store.appendResult(clean.id, result(0, 'on_whatsapp'));
+    await store.appendResult(clean.id, result(1, 'on_whatsapp'));
+    expect((await fs.promises.readFile(path.join(root, clean.id, 'results.jsonl'), 'utf8')).split('\n')).toHaveLength(3);
+  });
+
+  it('does not take answers it cannot read for answers that are not there', async () => {
+    const meta = await store.create({ name: 'x', source: 'paste', numbers });
+    await store.appendResult(meta.id, result(0, 'on_whatsapp'));
+    const file = path.join(root, meta.id, 'results.jsonl');
+    await fs.promises.rm(file);
+    await fs.promises.mkdir(file); // reading a folder fails, as a locked file does
+    await expect(store.pending(meta.id)).rejects.toThrow(/answers of this list could not be read \(E[A-Z]+\)/);
+    await expect(store.load(meta.id)).rejects.toThrow(/could not be read/);
+    // The list of sessions still opens.
+    expect((await store.list()).map((m) => m.id)).toEqual([meta.id]);
+  });
+
+  it('keeps both changes when a star and a checkpoint land together', async () => {
+    const meta = await store.create({ name: 'x', source: 'paste', numbers });
+    for (let round = 0; round < 25; round++) {
+      const starred = round % 2 === 0;
+      const [a, b] = await Promise.all([
+        store.updateMeta(meta.id, { starred }),
+        store.updateMeta(meta.id, { status: 'running', stopReason: `round ${round}` }),
+      ]);
+      expect(a.starred).toBe(starred);
+      expect(b).toMatchObject({ starred, stopReason: `round ${round}` });
+      expect(await store.readMeta(meta.id)).toMatchObject({ starred, status: 'running', stopReason: `round ${round}` });
+    }
+    expect(await fs.promises.readdir(path.join(root, meta.id))).toEqual(['meta.json', 'numbers.json']);
+  });
+
   it('refuses ids that are not plain names (they become folder names)', async () => {
     for (const bad of ['../settings', '..', 'a/b', 'a\\b', '', 'x'.repeat(81), 'a b', null, 42]) {
       expect(() => assertSessionId(bad)).toThrow('Invalid session id');
@@ -118,6 +163,17 @@ describe('SessionStore', () => {
     expect(await store.recoverInterrupted()).toBe(0);
   });
 
+  it('calls a session finished when the app closed after its last answer', async () => {
+    const meta = await store.create({ name: 'x', source: 'paste', numbers });
+    for (let i = 0; i < numbers.length; i++) await store.appendResult(meta.id, result(i, 'on_whatsapp'));
+    await store.updateMeta(meta.id, { status: 'running' });
+    expect(await store.recoverInterrupted()).toBe(1);
+    const loaded = await store.load(meta.id);
+    expect(loaded!.meta.status).toBe('completed');
+    expect(loaded!.meta.stopReason).toBeUndefined();
+    expect(loaded!.meta.finishedAt).toBeTruthy();
+  });
+
   it('writes nothing but the list, the answers and the meta', async () => {
     const meta = await store.create({ name: 'x', source: 'paste', numbers });
     await store.appendResult(meta.id, result(0, 'on_whatsapp'));
@@ -134,6 +190,17 @@ describe('SessionStore', () => {
     expect(await fs.promises.readFile(file, 'utf8')).toBe('two');
     expect(await fs.promises.readdir(root)).toEqual(['a.json']);
   });
+
+  it('writeFileAtomic keeps writes of the same instant apart and cleans up when the target refuses', async () => {
+    const file = path.join(root, 'b.json');
+    await Promise.all(Array.from({ length: 20 }, (_, i) => writeFileAtomic(file, String(i))));
+    expect(await fs.promises.readdir(root)).toEqual(['b.json']);
+
+    const folder = path.join(root, 'taken');
+    await fs.promises.mkdir(folder);
+    await expect(writeFileAtomic(folder, Buffer.from('x'))).rejects.toThrow();
+    expect((await fs.promises.readdir(root)).sort()).toEqual(['b.json', 'taken']);
+  }, 15_000);
 
   it('an empty store lists nothing', async () => {
     expect(await new SessionStore(path.join(root, 'nowhere')).list()).toEqual([]);

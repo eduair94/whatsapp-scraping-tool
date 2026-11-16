@@ -1,5 +1,7 @@
 Find out which numbers of a list are on WhatsApp, and what their profiles say: name, about, profile picture and the whole business profile. Open a CSV or Excel file (or paste the numbers), start the check, and export the answers to Excel, CSV or JSON.
 
+**New in 2.0.1:** fixes from a review of the engine. A direct key with no requests left now stops the check with that reason instead of "check your connection"; two clicks on Start no longer start two checks; numbers exported as decimals or in scientific notation, date columns and two numbers in one cell are read correctly; continuing after a crash never loses the next answer. Details: [CHANGELOG.md](https://github.com/eduair94/whatsapp-scraping-tool/blob/master/CHANGELOG.md).
+
 **Version 2 works again.** Version 1 stopped working on 4 November 2026, when the RapidAPI listing it used was removed. This release rewrites the engine and the window; your version 1 lists are carried over the first time it starts. What changed: [CHANGELOG.md](https://github.com/eduair94/whatsapp-scraping-tool/blob/master/CHANGELOG.md).
 
 ## Download

@@ -83,6 +83,64 @@ describe('extractCandidates', () => {
   });
 });
 
+describe('numbers that spreadsheets and data tools rewrite', () => {
+  it('reads a whole number exported as a decimal as the number it is', () => {
+    expect(extractCandidates('436641234567.0')).toEqual(['436641234567']);
+    expect(extractCandidates('+436641234567.00')).toEqual(['+436641234567']);
+    expect(parseNumbers(extractCandidates('436641234567.0'), 'AT').entries.map((e) => e.e164)).toEqual(['+436641234567']);
+    expect(parseNumbers(extractCandidates('2125550147.0'), 'US').entries.map((e) => e.e164)).toEqual(['+12125550147']);
+    // Dots inside a number are still punctuation.
+    expect(extractCandidates('212.555.0100')).toEqual(['212.555.0100']);
+  });
+
+  it('refuses scientific notation instead of guessing the lost digits', () => {
+    expect(extractCandidates('9.198765432E+11')).toEqual(['9.198765432E+11']);
+    const entry = parseNumber('9.198765432E+11', 'IN');
+    expect(entry.valid).toBe(false);
+    expect(entry.reason).toMatch(/scientific notation/);
+    expect(parseNumber('9E+11', 'IN').valid).toBe(false);
+  });
+
+  it('leaves dates alone, with hyphens or dots, year first or last', () => {
+    for (const date of ['2026-11-15', '2026.11.15', '15-11-2026', '15.11.2026', '11-15-2026', '2026-11-15 10:30:00', '1999-01-02']) {
+      expect(extractCandidates(date), date).toEqual([]);
+    }
+    // A number that only looks a little like a date is kept.
+    expect(extractCandidates('2026-11-155')).toEqual(['2026-11-155']);
+    expect(extractCandidates('2099 1115')).toEqual(['2099 1115']);
+  });
+
+  it('does not take a date column for a phone column', () => {
+    const rows = rowsFromText(
+      ['name,phone,signup', 'Ana,098 297 150,2026-11-10', 'Luis,099 123 456,2026-11-11', 'Eva,094 111 222,2026-11-12'].join('\n')
+    );
+    expect(phoneColumns(rows, 'UY')).toEqual([1]);
+    expect(candidatesFromRows(rows, 'UY')).toEqual(['098 297 150', '099 123 456', '094 111 222']);
+  });
+
+  it('tells two numbers in one cell apart', () => {
+    expect(extractCandidates('099 123 451 - 098 297 150')).toEqual(['099 123 451', '098 297 150']);
+    expect(extractCandidates('099 123 451   098 297 150')).toEqual(['099 123 451', '098 297 150']);
+    expect(extractCandidates('2125550147 2125550148')).toEqual(['2125550147', '2125550148']);
+    // One run of digits that is simply too long is not split.
+    expect(extractCandidates('1234567890123456789')).toEqual([]);
+  });
+
+  it('shows an unreadable cell of the phone column instead of dropping it', () => {
+    const rows = rowsFromText(
+      ['name,phone', 'Ana,098 297 150', 'Luis,099 123 456', 'Eva,1234567890123456789', 'Leo,ext 12', 'Mia,none', 'Noa,094 111 222', 'Sol,091 222 333'].join('\n')
+    );
+    expect(candidatesFromRows(rows, 'UY')).toEqual([
+      '098 297 150',
+      '099 123 456',
+      '1234567890123456789',
+      'ext 12',
+      '094 111 222',
+      '091 222 333',
+    ]);
+  });
+});
+
 describe('helpers', () => {
   it('lists every region libphonenumber knows, formats and gives examples', () => {
     expect(supportedCountries().length).toBeGreaterThan(200);
@@ -151,6 +209,17 @@ describe('reading files', () => {
     await fs.promises.writeFile(file, xlsx.write(book, { type: 'buffer', bookType: 'xlsx' }) as Buffer);
     const fromXlsx = await readListFile(file);
     expect(parseNumbers(candidatesFromRows(fromXlsx.rows, 'US'), 'US').entries.map((e) => e.e164)).toEqual(['+59898297150', '+59898297151']);
+  });
+
+  it('reads the UTF-16 text a spreadsheet saves as "Unicode Text"', async () => {
+    const text = 'name\tphone\r\nMaya\t+1 212 555 0147\r\nTom\t(212) 555-0148\r\n';
+    const little = path.join(dir, 'little.txt');
+    await fs.promises.writeFile(little, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]));
+    expect(candidatesFromRows((await readListFile(little)).rows, 'US')).toEqual(['+1 212 555 0147', '(212) 555-0148']);
+
+    const big = path.join(dir, 'big.txt');
+    await fs.promises.writeFile(big, Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(text, 'utf16le').swap16()]));
+    expect(candidatesFromRows((await readListFile(big)).rows, 'US')).toEqual(['+1 212 555 0147', '(212) 555-0148']);
   });
 
   it('refuses a file type it cannot read', async () => {

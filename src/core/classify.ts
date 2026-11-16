@@ -474,10 +474,12 @@ export function classify(
   }
 
   if (status === 429) {
-    if (code === 'DAILY_LIMIT_REACHED' || /daily/i.test(message)) {
+    // The direct API names a spent key in `code` and `error`; its `message` is advice on renewing.
+    const words = `${message} ${text(body?.error) ?? ''}`;
+    if (code === 'DAILY_LIMIT_REACHED' || /daily/i.test(words)) {
       throw new ApiError('DAILY_LIMIT', "The key reached today's limit. Continue tomorrow.", { status });
     }
-    if (/quota|monthly/i.test(message)) {
+    if (code === 'QUOTA_EXCEEDED' || /quota|monthly/i.test(words)) {
       throw new ApiError('QUOTA_EXCEEDED', 'The key has no requests left.', { status });
     }
     // "Requests must be at least 0.5 seconds apart" carries no Retry-After header.

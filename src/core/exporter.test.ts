@@ -5,7 +5,7 @@ import * as xlsx from 'xlsx';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { countResults } from '../shared/outcomes';
 import { CheckResult, ListNumber, Session } from '../shared/types';
-import { csvCell, EXPORT_COLUMNS, exportFileName, exportRows, rowValues, safeText, toCsv, toJson, writeExport } from './exporter';
+import { asWritten, csvCell, EXPORT_COLUMNS, exportFileName, exportRows, rowValues, safeText, toCsv, toJson, writeExport } from './exporter';
 
 const numbers: ListNumber[] = [
   { e164: '+12125550101', input: '(212) 555-0101' },
@@ -97,6 +97,17 @@ describe('rows', () => {
     const failed = rowValues(exportRows(session())[2]);
     expect(column(failed, 'Note')).toBe("'-timeout");
     expect(column(failed, 'As written in your list')).toBe("'=2125550103");
+  });
+
+  it('keeps a number written with its + exactly as the list has it', () => {
+    expect(asWritten('+1 212 555 0101')).toBe('+1 212 555 0101');
+    expect(asWritten('+1 (212) 555-0101')).toBe('+1 (212) 555-0101');
+    expect(asWritten('(212) 555-0101')).toBe('(212) 555-0101');
+    // Anything that is more than digits and punctuation is still neutralised.
+    expect(asWritten('+1+cmd|calc')).toBe("'+1+cmd|calc");
+    expect(asWritten('=2125550103')).toBe("'=2125550103");
+    expect(asWritten('-SUM(A1)')).toBe("'-SUM(A1)");
+    expect(asWritten(undefined)).toBe('');
   });
 
   it('writes every field of a full profile', () => {
@@ -205,6 +216,13 @@ describe('files', () => {
     expect(summary).toContainEqual(['On WhatsApp', '1']);
     expect(summary).toContainEqual(['Pending', '1']);
   });
+
+  it('leaves no temporary file beside a workbook it could not replace', async () => {
+    const target = path.join(dir, 'open-in-excel.xlsx');
+    await fs.promises.mkdir(target); // stands in for a file another program holds
+    await expect(writeExport(session(), 'xlsx', 'all', target)).rejects.toThrow();
+    expect(await fs.promises.readdir(dir)).toEqual(['open-in-excel.xlsx']);
+  }, 15_000);
 
   it('writes CSV and JSON, and JSON never carries a key or settings', async () => {
     const csv = path.join(dir, 'out.csv');

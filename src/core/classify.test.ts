@@ -303,6 +303,18 @@ describe('classify: errors', () => {
     [404, { message: "Endpoint '/number/1' does not exist" }, 'API_GONE', true, false],
     [404, { error: 'something else' }, 'BAD_RESPONSE', false, false],
     [429, { error: 'Monthly quota exceeded' }, 'QUOTA_EXCEEDED', true, false],
+    [
+      429,
+      {
+        error: 'Monthly quota exceeded',
+        code: 'QUOTA_EXCEEDED',
+        message: 'This API key has used all of its purchased requests. Renew it to add requests and extend its validity.',
+      },
+      'QUOTA_EXCEEDED',
+      true,
+      false,
+    ],
+    [429, { code: 'QUOTA_EXCEEDED', message: 'Renew this key to go on.' }, 'QUOTA_EXCEEDED', true, false],
     [429, { message: 'You have exceeded the MONTHLY quota for Requests on your current plan' }, 'QUOTA_EXCEEDED', true, false],
     [429, { code: 'DAILY_LIMIT_REACHED' }, 'DAILY_LIMIT', true, false],
     [429, { error: 'Requests must be at least 0.5 seconds apart' }, 'RATE_LIMITED', false, true],

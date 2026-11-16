@@ -104,8 +104,10 @@ export class SettingsStore {
       try {
         this.apiKey = await this.codec.decrypt(this.settings.apiKeyEnc);
       } catch {
-        // Encrypted on another machine or account: the stored key is unusable.
-        this.settings.apiKeyEnc = undefined;
+        // Encrypted on another machine or account, or the keychain said no this
+        // time. There is no key for now, but the stored one stays where it is:
+        // if the keychain answers next time it works again, and saving or
+        // forgetting a key replaces it.
       }
     }
 

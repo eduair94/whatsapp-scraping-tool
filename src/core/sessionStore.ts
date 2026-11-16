@@ -50,10 +50,13 @@ async function renameWithRetry(from: string, to: string): Promise<void> {
   }
 }
 
-export async function writeFileAtomic(file: string, data: string): Promise<void> {
-  const tmp = `${file}.${process.pid}.${Date.now().toString(36)}.tmp`;
-  await fs.promises.writeFile(tmp, data, 'utf8');
+/** Two writes in the same millisecond must not share a temporary file. */
+let tempFiles = 0;
+
+export async function writeFileAtomic(file: string, data: string | Buffer): Promise<void> {
+  const tmp = `${file}.${process.pid}.${Date.now().toString(36)}${(tempFiles++).toString(36)}.tmp`;
   try {
+    await fs.promises.writeFile(tmp, data);
     await renameWithRetry(tmp, file);
   } catch (err) {
     await fs.promises.rm(tmp, { force: true });
@@ -61,11 +64,53 @@ export async function writeFileAtomic(file: string, data: string): Promise<void>
   }
 }
 
+const isMissing = (err: unknown): boolean => (err as NodeJS.ErrnoException)?.code === 'ENOENT';
+
+/** A read failure in words a person can act on, with the system's code for a bug report. */
+function unreadable(what: string, err: unknown): Error {
+  const code = (err as NodeJS.ErrnoException)?.code;
+  return new Error(
+    `The ${what} of this list could not be read${code ? ` (${code})` : ''}. Close any program that has the file open, then try again.`
+  );
+}
+
+/**
+ * A file that is not there, or does not hold JSON, reads as `null`. A file
+ * that is there but could not be read (locked, too many open files) is an
+ * error: treating it as empty would ask a whole list again.
+ */
 async function readJson<T>(file: string): Promise<T | null> {
+  let raw: string;
   try {
-    return JSON.parse(await fs.promises.readFile(file, 'utf8')) as T;
+    raw = await fs.promises.readFile(file, 'utf8');
+  } catch (err) {
+    if (isMissing(err)) return null;
+    throw err;
+  }
+  try {
+    return JSON.parse(raw) as T;
   } catch {
     return null;
+  }
+}
+
+/** Whether a file ends in the middle of a line, as a crash during a write leaves it. */
+async function endsMidLine(file: string): Promise<boolean> {
+  let handle: fs.promises.FileHandle;
+  try {
+    handle = await fs.promises.open(file, 'r');
+  } catch (err) {
+    if (isMissing(err)) return false;
+    throw err;
+  }
+  try {
+    const { size } = await handle.stat();
+    if (size === 0) return false;
+    const last = Buffer.alloc(1);
+    await handle.read(last, 0, 1, size - 1);
+    return last[0] !== 0x0a;
+  } finally {
+    await handle.close();
   }
 }
 
@@ -76,6 +121,11 @@ export interface NewSession {
 }
 
 export class SessionStore {
+  /** Meta updates wait for the one before them: each reads the file, changes it and writes it back. */
+  private readonly metaWrites = new Map<string, Promise<unknown>>();
+  /** Sessions whose answers file is known to end on a line break. */
+  private readonly cleanTail = new Set<string>();
+
   constructor(readonly root: string) {}
 
   private dir(id: string): string {
@@ -118,8 +168,23 @@ export class SessionStore {
     return meta && meta.id === id ? meta : null;
   }
 
-  /** Merges `patch` into the stored meta. Answers are never touched by this. */
-  async updateMeta(id: string, patch: Partial<SessionMeta>): Promise<SessionMeta> {
+  /**
+   * Merges `patch` into the stored meta. Answers are never touched by this.
+   * A star clicked while a run saves its totals must not undo either change,
+   * so updates of one session run one after the other.
+   */
+  updateMeta(id: string, patch: Partial<SessionMeta>): Promise<SessionMeta> {
+    const before = this.metaWrites.get(id) ?? Promise.resolve();
+    const mine = before.catch(() => undefined).then(() => this.mergeMeta(id, patch));
+    this.metaWrites.set(id, mine);
+    const forget = (): void => {
+      if (this.metaWrites.get(id) === mine) this.metaWrites.delete(id);
+    };
+    mine.then(forget, forget);
+    return mine;
+  }
+
+  private async mergeMeta(id: string, patch: Partial<SessionMeta>): Promise<SessionMeta> {
     const current = await this.readMeta(id);
     if (!current) throw new Error('Session not found');
     const next: SessionMeta = {
@@ -134,11 +199,21 @@ export class SessionStore {
   }
 
   async appendResult(id: string, result: CheckResult): Promise<void> {
-    await fs.promises.appendFile(this.resultsFile(id), `${JSON.stringify(result)}\n`, 'utf8');
+    const file = this.resultsFile(id);
+    // After a crash the file can end in half a line. The next answer starts on
+    // a line of its own, or it would be glued to that half and lost with it.
+    const lead = this.cleanTail.has(id) || !(await endsMidLine(file)) ? '' : '\n';
+    this.cleanTail.delete(id);
+    await fs.promises.appendFile(file, `${lead}${JSON.stringify(result)}\n`, 'utf8');
+    this.cleanTail.add(id);
   }
 
   async readNumbers(id: string): Promise<ListNumber[]> {
-    return (await readJson<ListNumber[]>(this.numbersFile(id))) ?? [];
+    try {
+      return (await readJson<ListNumber[]>(this.numbersFile(id))) ?? [];
+    } catch (err) {
+      throw unreadable('numbers', err);
+    }
   }
 
   /** The latest answer per number. A torn last line (crash mid-write) is skipped. */
@@ -147,8 +222,10 @@ export class SessionStore {
     let raw: string;
     try {
       raw = await fs.promises.readFile(this.resultsFile(id), 'utf8');
-    } catch {
-      return latest;
+    } catch (err) {
+      // No file yet means no answers yet. Any other failure must not pass for that.
+      if (isMissing(err)) return latest;
+      throw unreadable('answers', err);
     }
     for (const line of raw.split('\n')) {
       if (!line) continue;
@@ -200,7 +277,7 @@ export class SessionStore {
     const metas: SessionMeta[] = [];
     for (const name of names) {
       if (!VALID_ID.test(name)) continue;
-      const meta = await this.readMeta(name);
+      const meta = await this.readMeta(name).catch(() => null);
       if (meta) metas.push(meta);
     }
     return metas.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
@@ -216,6 +293,7 @@ export class SessionStore {
     // A file written or briefly locked (antivirus, an open export) makes a single
     // attempt fail with ENOTEMPTY, EBUSY or EPERM; Node retries those.
     await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    this.cleanTail.delete(id);
     return true;
   }
 
@@ -229,18 +307,26 @@ export class SessionStore {
   /**
    * A session still marked `running` when the app starts was cut off by a
    * crash or a forced quit. Its answers are intact; only the label is wrong.
+   * One that was cut off after its last answer is simply finished.
    */
   async recoverInterrupted(): Promise<number> {
     let recovered = 0;
     for (const meta of await this.list()) {
       if (meta.status !== 'running') continue;
-      const session = await this.load(meta.id);
-      await this.updateMeta(meta.id, {
-        status: 'stopped',
-        stopReason: 'The app closed while this check was running. Nothing was lost.',
-        counts: session?.meta.counts ?? meta.counts,
-      });
-      recovered++;
+      try {
+        const session = await this.load(meta.id);
+        const counts = session?.meta.counts ?? meta.counts;
+        const done = Boolean(session) && counts.total > 0 && counts.pending === 0;
+        await this.updateMeta(
+          meta.id,
+          done
+            ? { status: 'completed', stopReason: undefined, counts, finishedAt: meta.finishedAt ?? meta.updatedAt }
+            : { status: 'stopped', stopReason: 'The app closed while this check was running. Nothing was lost.', counts }
+        );
+        recovered++;
+      } catch {
+        // Unreadable right now: it keeps its label and is looked at again next start.
+      }
     }
     return recovered;
   }

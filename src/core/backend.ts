@@ -26,7 +26,7 @@ import { CheckRun } from './checker';
 import { ApiError } from './classify';
 import { MAX_SAMPLE_NUMBERS, sampleNumbers } from './demo';
 import { exportFileName, writeExport } from './exporter';
-import { candidatesFromRows, candidatesFromText, readListFile } from './inputFiles';
+import { candidatesFromRows, candidatesFromText, readListFile, Rows } from './inputFiles';
 import { migrateLegacySessions, MigrationReport } from './legacy';
 import { parseNumbers } from './phone';
 import { SessionStore } from './sessionStore';
@@ -53,11 +53,27 @@ export interface BackendOptions {
   onEnd?: (end: RunEnd) => void;
 }
 
+/** Cells kept per file so its phone columns can be found again under another country. */
+const MAX_KEPT_CELLS = 2_000_000;
+
+/** One file or one paste of the list being prepared. */
+interface DraftPart {
+  /** Raw phone-like strings, kept so the list can be re-read against another country. */
+  candidates: string[];
+  /**
+   * A file's rows. Which columns hold phone numbers depends on the default
+   * country, so they are looked for again when it changes. Very large files
+   * keep only the candidates found when they were opened.
+   */
+  rows?: Rows;
+  /** The country `candidates` were read with, when `rows` is kept. */
+  country?: string;
+}
+
 interface Draft {
   label: string;
   source: SessionSource;
-  /** Raw phone-like strings, kept so the list can be re-read against another country. */
-  candidates: string[];
+  parts: DraftPart[];
   /** Sample numbers are already final and are never re-read. */
   fixed?: ParsedList;
 }
@@ -67,6 +83,8 @@ export class Backend {
   readonly store: SessionStore;
   readonly demo: boolean;
   private run: CheckRun | null = null;
+  /** True from the first line of `startRun` until its run exists, so two clicks start one run. */
+  private starting = false;
   private runDone: Promise<RunEnd> | null = null;
   private draft: Draft | null = null;
 
@@ -167,36 +185,48 @@ export class Backend {
   private parseDraft(): ParsedList | null {
     if (!this.draft) return null;
     if (this.draft.fixed) return this.draft.fixed;
-    const { entries, duplicates } = parseNumbers(this.draft.candidates, this.settings.getPublic().defaultCountry);
+    const country = this.settings.getPublic().defaultCountry;
+    const candidates: string[] = [];
+    for (const part of this.draft.parts) {
+      if (part.rows && part.country !== country) {
+        part.candidates = candidatesFromRows(part.rows, country);
+        part.country = country;
+      }
+      for (const candidate of part.candidates) candidates.push(candidate);
+    }
+    const { entries, duplicates } = parseNumbers(candidates, country);
     return {
       entries,
       label: this.draft.label,
       source: this.draft.source,
-      found: this.draft.candidates.length,
+      found: candidates.length,
       duplicates,
     };
   }
 
-  private setDraft(label: string, source: SessionSource, candidates: string[], append: boolean): ParsedList {
+  private setDraft(label: string, source: SessionSource, part: DraftPart, append: boolean): ParsedList {
     if (append && this.draft && !this.draft.fixed) {
-      this.draft = { ...this.draft, candidates: [...this.draft.candidates, ...candidates] };
+      this.draft = { ...this.draft, parts: [...this.draft.parts, part] };
     } else {
-      this.draft = { label, source, candidates };
+      this.draft = { label, source, parts: [part] };
     }
     return this.parseDraft()!;
   }
 
   async listFromFile(filePath: string, append = false): Promise<ParsedList> {
     const { label, rows } = await readListFile(filePath);
-    const candidates = candidatesFromRows(rows, this.settings.getPublic().defaultCountry);
+    const country = this.settings.getPublic().defaultCountry;
+    const candidates = candidatesFromRows(rows, country);
     if (candidates.length === 0) throw new Error('No phone numbers were found in this file.');
-    return this.setDraft(label, 'file', candidates, append);
+    const cells = rows.reduce((sum, row) => sum + row.length, 0);
+    const part: DraftPart = cells <= MAX_KEPT_CELLS ? { candidates, rows, country } : { candidates };
+    return this.setDraft(label, 'file', part, append);
   }
 
   listFromText(text: string, append = false): ParsedList {
     const candidates = candidatesFromText(String(text ?? '').slice(0, 5_000_000));
     if (candidates.length === 0) throw new Error('No phone numbers were found in what you pasted.');
-    return this.setDraft('Pasted numbers', 'paste', candidates, append);
+    return this.setDraft('Pasted numbers', 'paste', { candidates }, append);
   }
 
   /** Sample numbers exist only in demo mode: real checks need the person's own list. */
@@ -207,7 +237,7 @@ export class Backend {
     this.draft = {
       label: `${n.toLocaleString('en-US')} sample numbers`,
       source: 'sample',
-      candidates: [],
+      parts: [],
       fixed: { entries, label: `${n.toLocaleString('en-US')} sample numbers`, source: 'sample', found: n, duplicates: 0 },
     };
     return this.draft.fixed!;
@@ -278,9 +308,19 @@ export class Backend {
 
   /** Starts or continues a session. Only one check runs at a time. */
   async startRun(sessionId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-    if (this.run?.running) {
+    // Reading the list takes a moment; a second click in that moment must not start a second run.
+    if (this.run?.running || this.starting) {
       return { ok: false, error: 'Another check is running. Stop it first.' };
     }
+    this.starting = true;
+    try {
+      return await this.begin(sessionId);
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  private async begin(sessionId: string): Promise<{ ok: true } | { ok: false; error: string }> {
     const meta = await this.store.readMeta(sessionId);
     if (!meta) return { ok: false, error: 'This list no longer exists.' };
     const key = this.settings.getKey();

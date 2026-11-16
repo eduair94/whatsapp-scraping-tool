@@ -121,7 +121,14 @@ export function candidatesFromRows(rows: Rows, defaultCountry: string): string[]
   const out: string[] = [];
   for (const row of rows) {
     const cells = columns ? columns.map((index) => row[index] ?? '') : row;
-    for (const cell of cells) if (cell) out.push(...extractCandidates(cell));
+    for (const cell of cells) {
+      if (!cell) continue;
+      const found = extractCandidates(cell);
+      if (found.length) out.push(...found);
+      // In a phone column, a cell with digits that cannot be read is shown as
+      // invalid instead of vanishing. Other columns are full of such cells.
+      else if (columns && /\d/.test(cell)) out.push(cell.trim().slice(0, 40));
+    }
   }
   return out;
 }
@@ -138,6 +145,19 @@ export function candidatesFromText(text: string): string[] {
     else if (/\d/.test(piece)) out.push(piece.slice(0, 40));
   }
   return out;
+}
+
+/**
+ * Text files are UTF-8, except the "Unicode Text" a spreadsheet saves, which
+ * is UTF-16 and says so in its first two bytes.
+ */
+export function decodeText(buffer: Buffer): string {
+  if (buffer[0] === 0xff && buffer[1] === 0xfe) return buffer.subarray(2).toString('utf16le');
+  if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+    const body = Buffer.from(buffer.subarray(2, 2 + ((buffer.length - 2) & ~1)));
+    return body.swap16().toString('utf16le');
+  }
+  return buffer.toString('utf8');
 }
 
 export interface FileRows {
@@ -158,6 +178,6 @@ export async function readListFile(filePath: string): Promise<FileRows> {
   const rows =
     extension === '.xlsx' || extension === '.xls'
       ? rowsFromWorkbook(buffer)
-      : rowsFromText(buffer.toString('utf8'));
+      : rowsFromText(decodeText(buffer));
   return { label: path.basename(filePath), rows };
 }

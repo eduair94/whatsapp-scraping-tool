@@ -7,7 +7,6 @@
  * carries a byte-order mark and CRLF line ends so Excel reads accents and
  * emoji correctly.
  */
-import * as fs from 'fs';
 import * as xlsx from 'xlsx';
 import { CHANNELS } from '../shared/channels';
 import { OUTCOME_LABEL } from '../shared/outcomes';
@@ -99,6 +98,15 @@ export function safeText(value: string | undefined): string {
   return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
 }
 
+/**
+ * What the person wrote in their list. A phone number written with its "+" is
+ * digits and punctuation, which no spreadsheet can run, so it stays exactly as
+ * written and can be matched against the list it came from.
+ */
+export function asWritten(value: string | undefined): string {
+  return value && /^\+?[\d ().\-\u00a0]+$/.test(value) ? value : safeText(value);
+}
+
 /** More than an hour between the record and the check: the record came from the database. */
 function recordDate(r: CheckResult | null): string {
   if (!r?.recordedAt) return '';
@@ -140,7 +148,7 @@ export function rowValues(row: ExportRow): string[] {
     recordDate(r),
     r?.checkedAt ?? '',
     safeText(r?.note),
-    safeText(row.entry.input),
+    asWritten(row.entry.input),
   ];
 }
 
@@ -254,9 +262,7 @@ export async function writeExport(
   else if (format === 'json') await writeFileAtomic(filePath, toJson(session, rows));
   else {
     const buffer = xlsx.write(toWorkbook(session, rows), { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-    const tmp = `${filePath}.${process.pid}.tmp`;
-    await fs.promises.writeFile(tmp, buffer);
-    await fs.promises.rename(tmp, filePath);
+    await writeFileAtomic(filePath, buffer);
   }
   return { rows: rows.length };
 }

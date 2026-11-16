@@ -87,6 +87,42 @@ describe('Backend', () => {
     expect(uy.entries.map((e) => e.e164)).toEqual(['+59898297150', '+59899123456']);
   });
 
+  it('finds the phone columns of a file again when the default country changes', async () => {
+    const b = await backend();
+    const file = path.join(dir, 'two-columns.csv');
+    await fs.promises.writeFile(
+      file,
+      ['name,mobile,landline', 'Ana,+598 98 297 150,2902 1234', 'Luis,+598 99 123 456,2903 5678', 'Eva,+598 94 111 222,2904 9012'].join('\n')
+    );
+    const us = await b.listFromFile(file);
+    expect(us.entries.filter((e) => e.valid)).toHaveLength(3);
+    await b.updateSettings({ defaultCountry: 'UY' });
+    const uy = b.currentList()!;
+    expect(uy.entries.filter((e) => e.valid).map((e) => e.e164)).toEqual([
+      '+59898297150',
+      '+59829021234',
+      '+59899123456',
+      '+59829035678',
+      '+59894111222',
+      '+59829049012',
+    ]);
+  });
+
+  it('starts one run when Start is clicked twice at once', async () => {
+    const b = await backend();
+    await b.updateSettings({ apiKey: KEY });
+    b.listFromText(TEN);
+    const meta = await b.createSession();
+    const [first, second] = await Promise.all([b.startRun(meta.id), b.startRun(meta.id)]);
+    expect(first).toEqual({ ok: true });
+    expect(second).toEqual({ ok: false, error: 'Another check is running. Stop it first.' });
+    await finished();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(ends).toHaveLength(1);
+    expect((await b.getSession(meta.id))!.meta.counts.checked).toBe(10);
+    expect(updates.filter((u) => u.result)).toHaveLength(10);
+  });
+
   it('adds more numbers to the list being prepared', async () => {
     const b = await backend();
     b.listFromText('(212) 555-0101');

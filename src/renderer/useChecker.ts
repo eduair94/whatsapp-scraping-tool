@@ -62,6 +62,11 @@ export function useChecker() {
 
   const results = useRef(new Map<string, CheckResult>());
   const openId = useRef<string | null>(null);
+  /** The session being read from disk, and the answers that arrived while it was read. */
+  const loadingId = useRef<string | null>(null);
+  const arrived = useRef<CheckResult[]>([]);
+  /** True while a start is on its way, so a second click does nothing. */
+  const starting = useRef(false);
 
   const fail = useCallback((err: unknown) => setNotice({ kind: 'error', text: message(err) }), []);
 
@@ -74,6 +79,8 @@ export function useChecker() {
   const openSession = useCallback(
     async (id: string) => {
       openId.current = id;
+      loadingId.current = id;
+      arrived.current = [];
       setView({ kind: 'session', id });
       setSessionLoading(true);
       try {
@@ -85,12 +92,19 @@ export function useChecker() {
           await loadSessions();
           return;
         }
-        results.current = new Map(loaded.results.map((r) => [r.number, r]));
+        const map = new Map(loaded.results.map((r) => [r.number, r]));
+        // A running check kept answering while the file was read: those answers are newer.
+        for (const r of arrived.current) map.set(r.number, r);
+        results.current = map;
         setSession(loaded);
         setVersion((v) => v + 1);
       } catch (err) {
         fail(err);
       } finally {
+        if (loadingId.current === id) {
+          loadingId.current = null;
+          arrived.current = [];
+        }
         if (openId.current === id) setSessionLoading(false);
       }
     },
@@ -137,6 +151,7 @@ export function useChecker() {
       if (openId.current !== p.sessionId) return;
       if (p.result) {
         results.current.set(p.result.number, p.result);
+        if (loadingId.current === p.sessionId) arrived.current.push(p.result);
         setVersion((v) => v + 1);
       }
       setLive({ rate: p.rate, etaMs: p.etaMs, waiting: p.waiting, lastNumber: p.result?.number });
@@ -270,14 +285,20 @@ export function useChecker() {
   // ── Sessions and the run ─────────────────────────────────────────────────
   const start = useCallback(
     async (id: string) => {
-      setNotice(null);
-      const outcome = await checker.run.start(id).catch((err) => ({ ok: false as const, error: message(err) }));
-      if (!outcome.ok) {
-        setNotice({ kind: 'error', text: outcome.error });
-        return false;
+      if (starting.current) return false;
+      starting.current = true;
+      try {
+        setNotice(null);
+        const outcome = await checker.run.start(id).catch((err) => ({ ok: false as const, error: message(err) }));
+        if (!outcome.ok) {
+          setNotice({ kind: 'error', text: outcome.error });
+          return false;
+        }
+        setRunningId(id);
+        return true;
+      } finally {
+        starting.current = false;
       }
-      setRunningId(id);
-      return true;
     },
     []
   );

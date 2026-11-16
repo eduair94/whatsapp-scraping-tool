@@ -191,7 +191,8 @@ export function SessionView({
       }
       if (text) {
         const hit = numeric
-          ? digits !== '' && number.e164.includes(digits)
+          ? // As stored ("+59899123456") or as the list has it ("099 123 456").
+            digits !== '' && (number.e164.includes(digits) || number.input.replace(/[^0-9]/g, '').includes(digits))
           : Boolean(result?.name?.toLowerCase().includes(text)) ||
             Boolean(result?.category?.toLowerCase().includes(text)) ||
             Boolean(result?.about?.toLowerCase().includes(text)) ||

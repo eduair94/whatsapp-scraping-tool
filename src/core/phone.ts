@@ -15,12 +15,43 @@ const util = PhoneNumberUtil.getInstance();
  * A run of digits with the punctuation people put inside phone numbers:
  * spaces (also the non-breaking ones spreadsheets insert), brackets, dots and
  * hyphens. Slashes are left out so dates are not read as numbers.
+ *
+ * The first alternative is a number a spreadsheet wrote in scientific notation
+ * ("9.19877E+11"). It is taken whole so that its digits are never mistaken for
+ * a phone number; `parseNumber` then says what is wrong with it.
  */
-const CANDIDATE = /\(?\+?\d[\d ().\-\u00a0]{4,}\d/g;
+const CANDIDATE = /\d(?:[.,]\d+)?[eE]\+\d{1,3}|\(?\+?\d[\d ().\-\u00a0]{4,}\d/g;
+const SCIENTIFIC = /^\d(?:[.,]\d+)?[eE]\+\d{1,3}$/;
+/** "436641234567.0": a whole number that a data tool exported as a decimal. */
+const WHOLE_AS_DECIMAL = /^(\+?\d+)\.0+$/;
+/** Dates written with hyphens or dots, with an hour after them when a time follows. */
+const YEAR_FIRST = /^(?:19|20)\d\d[-.](?:0?[1-9]|1[0-2])[-.](?:0?[1-9]|[12]\d|3[01])(?: \d{1,2})?$/;
+const YEAR_LAST = /^(?:0?[1-9]|[12]\d|3[01])[-.](?:0?[1-9]|[12]\d|3[01])[-.](?:19|20)\d\d(?: \d{1,2})?$/;
 const MIN_DIGITS = 7;
 const MAX_DIGITS = 15;
 
 const digitsOf = (value: string): string => value.replace(/\D/g, '');
+const phoneLength = (value: string): boolean => {
+  const digits = digitsOf(value).length;
+  return digits >= MIN_DIGITS && digits <= MAX_DIGITS;
+};
+
+/**
+ * Two numbers written in one cell ("099 123 451 - 098 297 150") come out of
+ * the pattern as one run that is too long. They are told apart by the dash
+ * between them, by a wide gap, or by a single space when each side is a whole
+ * number on its own.
+ */
+function splitJoined(piece: string): string[] {
+  for (const separator of [/\s+-\s+|\s{2,}/, /\s+/]) {
+    const parts = piece
+      .split(separator)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length > 1 && parts.every(phoneLength)) return parts;
+  }
+  return [];
+}
 
 export function supportedCountries(): string[] {
   return (util.getSupportedRegions() as string[]).slice().sort();
@@ -30,15 +61,22 @@ export function isSupportedCountry(code: string): boolean {
   return (util.getSupportedRegions() as string[]).includes(code);
 }
 
-/** Phone-like pieces of a cell or a line. Dates and short codes are left out by length. */
+/** Phone-like pieces of a cell or a line. Dates and short codes are left out. */
 export function extractCandidates(text: string): string[] {
   const out: string[] = [];
   for (const match of text.matchAll(CANDIDATE)) {
     let piece = match[0].trim();
+    if (SCIENTIFIC.test(piece)) {
+      out.push(piece);
+      continue;
+    }
     // "(212) 555-0147" keeps its bracket; "(see 212 555 0147" does not.
     if (piece.startsWith('(') && !piece.includes(')')) piece = piece.slice(1).trim();
+    piece = piece.replace(WHOLE_AS_DECIMAL, '$1');
+    if (YEAR_FIRST.test(piece) || YEAR_LAST.test(piece)) continue;
     const digits = digitsOf(piece).length;
-    if (digits >= MIN_DIGITS && digits <= MAX_DIGITS) out.push(piece);
+    if (digits > MAX_DIGITS) out.push(...splitJoined(piece));
+    else if (digits >= MIN_DIGITS) out.push(piece);
   }
   return out;
 }
@@ -92,6 +130,11 @@ export function parseNumber(raw: string, defaultCountry: string): PhoneEntry {
   const digits = digitsOf(input);
   const invalid = (reason: string): PhoneEntry => ({ input, e164: null, valid: false, reason });
 
+  if (SCIENTIFIC.test(input)) {
+    return invalid(
+      'A spreadsheet wrote this number in scientific notation, which drops its last digits. Format the column as text, save the file again and open it here.'
+    );
+  }
   if (digits.length < MIN_DIGITS) return invalid('Too short to be a phone number.');
   if (digits.length > MAX_DIGITS) return invalid('Too long to be a phone number.');
 

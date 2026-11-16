@@ -127,11 +127,34 @@ describe('SettingsStore', () => {
     expect(Object.keys(JSON.parse(onDisk()))).not.toContain('concurrentRequests');
   });
 
-  it('drops a stored key it cannot decrypt instead of failing to start', async () => {
+  it('starts without a key when the stored one cannot be decrypted', async () => {
     await fs.promises.writeFile(file, JSON.stringify({ apiKeyEnc: Buffer.from('from another machine').toString('base64') }));
     const store = new SettingsStore(file, codec());
     await store.load();
     expect(store.getPublic().hasKey).toBe(false);
+  });
+
+  it('does not erase the stored key because the keychain refused once', async () => {
+    const first = new SettingsStore(file, codec());
+    await first.load();
+    await first.patch({ apiKey: KEY });
+
+    const refusing: KeyCodec = { ...codec(), decrypt: () => { throw new Error('the keychain said no'); } };
+    const locked = new SettingsStore(file, refusing);
+    await locked.load();
+    expect(locked.getPublic().hasKey).toBe(false);
+    await locked.patch({ theme: 'dark' });
+
+    const later = new SettingsStore(file, codec());
+    await later.load();
+    expect(later.getKey()).toBe(KEY);
+    expect(later.getPublic().theme).toBe('dark');
+
+    // Forgetting the key while it cannot be read still removes it.
+    const forgetting = new SettingsStore(file, refusing);
+    await forgetting.load();
+    await forgetting.patch({ apiKey: '' });
+    expect(onDisk()).not.toMatch(/apiKeyEnc/);
   });
 
   it('survives an unreadable settings file', async () => {

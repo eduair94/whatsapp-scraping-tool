@@ -1,5 +1,59 @@
 # Changelog
 
+## 2.0.1 (2026-11-16)
+
+Fixes from a review of the engine. Nothing changes in how you use the app;
+your lists and settings stay as they are.
+
+### A check that stops for the right reason
+
+- **A direct key with no requests left** was treated as "slow down": the app
+  kept retrying, marked numbers as failed and finally blamed your connection.
+  It now stops at once and says the key has no requests left.
+- **Clicking Start or Continue twice** could start two checks of the same list.
+  Each number was asked twice, and Stop reached only one of them.
+
+### Reading your list
+
+- **Numbers a data tool exported as decimals** (`436641234567.0`) were read as a
+  different number, or all rejected. They are read as the whole number.
+- **Numbers a spreadsheet wrote in scientific notation** (`9.19877E+11`) were
+  read as a different, valid-looking number. They are now shown as invalid,
+  with the way to fix the file: the notation has already dropped digits.
+- **A column of dates** (`2026-11-15`, `15.11.2026`) could be taken for a phone
+  column in some countries, and each date cost a request.
+- **Two numbers in one cell** (`099 123 451 - 098 297 150`) were dropped without
+  a word. Both are read. A cell of the phone column that cannot be read at all
+  is listed as invalid instead of vanishing.
+- **Changing the default country** after opening a file now looks for the phone
+  columns again, so a column of numbers without a country code is found.
+- **Text files in UTF-16**, which Excel saves as "Unicode Text", read as empty.
+
+### Your answers and your key
+
+- **Continuing after a crash** could lose the first new answer: it was written
+  onto the half line the crash left behind.
+- **A results file that could not be read** (locked by another program) passed
+  for an empty one, so Continue would have asked the whole list again. The app
+  now says it could not read the file.
+- **A star or a rename during a check** could be undone by the check saving its
+  totals at the same moment, or stop the check with a file error.
+- **A list whose check finished just as the app closed** came back as "Stopped
+  at N of N" with no way to finish it. It now comes back as completed.
+- **One refusal from the system keychain** made the app forget the stored key
+  the next time any setting changed. The stored key is now kept until you save
+  or forget a key yourself.
+
+### The window and the exports
+
+- **Opening a list while it is being checked** could leave one row showing
+  "Pending" although its answer had arrived.
+- **Search** finds a number typed the way your list has it (`099123456`), not
+  only with its country code.
+- **Exports** keep a number written with its `+` exactly as your list has it;
+  it used to get an apostrophe in front. A failed Excel export no longer leaves
+  a temporary file beside the target.
+
 ## 2.0.0 (2026-11-16)
 
 Version 1 stopped working on 4 November 2026: the RapidAPI listing it was built
