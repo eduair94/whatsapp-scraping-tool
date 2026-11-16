@@ -1132,6 +1132,8 @@ select.input {
     grid-template-columns: auto max-content;
     column-gap: 0.5rem;
     align-items: center;
+    /* Wrapped rows share column widths; the mark stays next to its figure. */
+    justify-content: start;
   }
 
   .totals li > span {
