@@ -1,5 +1,10 @@
 # WhatsApp Number Checker
 
+[![Latest release](https://img.shields.io/github/v/release/eduair94/whatsapp-scraping-tool)](https://github.com/eduair94/whatsapp-scraping-tool/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/eduair94/whatsapp-scraping-tool/total)](https://github.com/eduair94/whatsapp-scraping-tool/releases)
+[![CI](https://github.com/eduair94/whatsapp-scraping-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/eduair94/whatsapp-scraping-tool/actions/workflows/ci.yml)
+[![MIT licence](https://img.shields.io/github/license/eduair94/whatsapp-scraping-tool)](LICENSE)
+
 Find out which numbers of a list are on WhatsApp, and what their profiles say:
 name, about, profile picture, and the whole business profile. Open a CSV or
 Excel file (or paste the numbers), start the check, and export the answers to
